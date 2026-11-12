@@ -39,7 +39,7 @@ class ProductController(private val jdbc: JdbcTemplate) {
         }
         val total = jdbc.queryForObject(
             "SELECT COUNT(*) FROM products p $where",
-            Long::class.java,
+            Long::class.javaObjectType,
             *args.toTypedArray()
         ) ?: 0L
         val rows = jdbc.query(
