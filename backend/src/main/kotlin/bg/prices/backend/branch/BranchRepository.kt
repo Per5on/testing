@@ -14,7 +14,7 @@ interface BranchRepository : JpaRepository<Branch, UUID> {
         )
         order by b.retailerName, b.address
     """)
-    fun findByLocality(@Param("locality") locality: String): List<Branch>
+    fun findByLocality(@Param("locality") locality: String, pageable: Pageable): List<Branch>
 
     @Query("""
         select b from Branch b
