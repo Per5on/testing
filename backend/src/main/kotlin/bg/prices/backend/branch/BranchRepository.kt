@@ -3,6 +3,7 @@ package bg.prices.backend.branch
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import org.springframework.data.domain.Pageable
 import java.util.UUID
 
 interface BranchRepository : JpaRepository<Branch, UUID> {
@@ -25,7 +26,7 @@ interface BranchRepository : JpaRepository<Branch, UUID> {
         )
         order by b.city, b.settlement, b.retailerName
     """)
-    fun searchLocality(@Param("query") query: String): List<Branch>
+    fun searchLocality(@Param("query") query: String, pageable: Pageable): List<Branch>
 
     @Query(value = """
         SELECT b.*,
@@ -42,6 +43,7 @@ interface BranchRepository : JpaRepository<Branch, UUID> {
             sin(radians(:latitude)) * sin(radians(b.latitude))
           )))) <= :radiusKm
         ORDER BY distance_km ASC
+        LIMIT 200
     """, nativeQuery = true)
     fun findNearby(
         @Param("latitude") latitude: Double,
