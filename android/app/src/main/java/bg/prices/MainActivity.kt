@@ -69,7 +69,7 @@ private val translations = mapOf(
         "demo_prices" to "Демонстрационен изглед · Не се показват актуални цени от търговци.",
         "loading_prices" to "Зареждане на цени...", "no_verified_prices" to "Няма потвърдени актуални цени за избрания филтър.",
         "offer_disclaimer" to "Оферти от официални сайтове на търговци. Наличността и приложимостта може да се различават по магазин.",
-        "offer_source" to "Оферта от официален сайт", "source_details" to "Отвори източника", "retry" to "Опитай отново", "was" to "Редовна цена:"
+        "offer_source" to "Оферта от официален сайт", "source_details" to "Отвори източника", "retry" to "Опитай отново", "was" to "Редовна цена:",
         "basket_sub" to "Списъци · сравнения · спестявания",
         "current_category" to "Текуща категория: ", "no_store_filter" to "Няма избран магазин в Категории: показват се всички магазини от категорията.",
         "store_filter" to "Филтър от Категории: ", "prices_by_store" to "ЦЕНИ ПО МАГАЗИНИ",
@@ -125,7 +125,7 @@ private val translations = mapOf(
         "demo_prices" to "Demo layout only · no live retailer prices are displayed.",
         "loading_prices" to "Loading prices...", "no_verified_prices" to "No verified current prices match this filter.",
         "offer_disclaimer" to "Offers from official retailer websites. Stock and branch availability may vary.",
-        "offer_source" to "Official retailer offer", "source_details" to "Open source", "retry" to "Try again", "was" to "Regular price:"
+        "offer_source" to "Official retailer offer", "source_details" to "Open source", "retry" to "Try again", "was" to "Regular price:",
         "basket_sub" to "Lists · comparisons · savings",
         "current_category" to "Current category: ", "no_store_filter" to "No store selected in Categories: showing all stores in this category.",
         "store_filter" to "Store filter from Categories: ", "prices_by_store" to "PRICES BY STORE",
