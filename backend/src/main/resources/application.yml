@@ -34,6 +34,8 @@ spring:
         default_batch_fetch_size: 50
   flyway:
     enabled: true
+    baseline-on-migrate: true
+    baseline-version: 5
 
 management:
   endpoints:
@@ -46,4 +48,4 @@ management:
 
 catalog:
   osm:
-    overpass-url: ${OSM_OVERPASS_URL:https://overpass-api.de/api/interpreter}
+    overpass-url: ${OSM_OVERPASS_URL:https://maps.mail.ru/osm/tools/overpass/api/interpreter}

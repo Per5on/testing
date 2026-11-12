@@ -32,21 +32,21 @@ class OpenStreetMapImportJob(
         RetailerMatch("fantastico", "Fantastico", listOf("fantastico")),
         RetailerMatch("t_market", "T MARKET", listOf("t market", "t-market", "tmarket")),
         RetailerMatch("metro", "METRO", listOf("metro")),
-        RetailerMatch("moyat_magazin", "Моят магазин", listOf("moyat magazin", "my store")),
+        RetailerMatch("moyat_magazin", "Моят магазин", listOf("moyat magazin", "моят магазин", "my store")),
         RetailerMatch("cba", "CBA", listOf("cba")),
-        RetailerMatch("promarket", "ProMarket", listOf("promarket", "pro market")),
-        RetailerMatch("hit_max", "HIT Max", listOf("hit max", "hitmax")),
-        RetailerMatch("burlex", "Burlex", listOf("burlex")),
-        RetailerMatch("klasiko", "Klasiko", listOf("klasiko")),
+        RetailerMatch("promarket", "ProMarket", listOf("promarket", "pro market", "промаркет")),
+        RetailerMatch("hit_max", "HIT Max", listOf("hit max", "hitmax", "хит макс")),
+        RetailerMatch("burlex", "Burlex", listOf("burlex", "бурлекс")),
+        RetailerMatch("klasiko", "Klasiko", listOf("klasiko", "класико")),
         RetailerMatch("abc_market", "ABC Market", listOf("abc market", "abcmarket")),
-        RetailerMatch("mini_mart", "Mini Mart", listOf("mini mart", "minimart")),
-        RetailerMatch("technopolis", "Technopolis", listOf("technopolis")),
-        RetailerMatch("technomarket", "Technomarket", listOf("technomarket")),
-        RetailerMatch("zora", "Зора", listOf("zora")),
+        RetailerMatch("mini_mart", "Mini Mart", listOf("mini mart", "minimart", "мини март")),
+        RetailerMatch("technopolis", "Technopolis", listOf("technopolis", "технополис")),
+        RetailerMatch("technomarket", "Technomarket", listOf("technomarket", "техномаркет")),
+        RetailerMatch("zora", "Зора", listOf("zora", "зора")),
         RetailerMatch("ardes", "Ardes", listOf("ardes")),
         RetailerMatch("plesio", "Plesio", listOf("plesio")),
         RetailerMatch("plasico", "Plasico", listOf("plasico")),
-        RetailerMatch("vali", "Вали", listOf("vali")),
+        RetailerMatch("vali", "Вали", listOf("vali", "вали")),
         RetailerMatch("jar_computers", "Jar Computers", listOf("jar computers", "jarcomputers")),
         RetailerMatch("homemax", "HomeMax", listOf("homemax", "home max")),
         RetailerMatch("bauhaus", "Bauhaus", listOf("bauhaus")),
@@ -54,9 +54,9 @@ class OpenStreetMapImportJob(
         RetailerMatch("jysk", "JYSK", listOf("jysk")),
         RetailerMatch("mr_bricolage", "Mr. Bricolage", listOf("mr bricolage", "mrbricolage")),
         RetailerMatch("praktiker", "Praktiker", listOf("praktiker")),
-        RetailerMatch("praktis", "Практис", listOf("praktis")),
-        RetailerMatch("videnov", "Мебели Виденов", listOf("videnov", "mebeli videnov")),
-        RetailerMatch("mondo", "Mondo", listOf("mondo")),
+        RetailerMatch("praktis", "Практис", listOf("praktis", "практис")),
+        RetailerMatch("videnov", "Мебели Виденов", listOf("videnov", "mebeli videnov", "мебели виденов", "виденов")),
+        RetailerMatch("mondo", "Mondo", listOf("mondo", "мондо")),
         RetailerMatch("lukoil", "LUKOIL", listOf("lukoil")),
         RetailerMatch("omv", "OMV", listOf("omv")),
         RetailerMatch("shell", "Shell", listOf("shell")),
@@ -69,50 +69,50 @@ class OpenStreetMapImportJob(
     fun importOnce() {
         val startedAt = System.nanoTime()
         try {
-            val query = """
-                [out:json][timeout:180];
+            val localityQuery = """
+                [out:json][timeout:120];
+                area["ISO3166-1"="BG"][admin_level=2]->.bg;
+                nwr["place"~"^(city|town|village|hamlet)$"](area.bg);
+                out center tags;
+            """.trimIndent()
+            val retailerPattern = retailers.flatMap { it.aliases }.distinct()
+                .joinToString("|") { it.replace(".", "\\.") }
+            val branchQuery = """
+                [out:json][timeout:120];
                 area["ISO3166-1"="BG"][admin_level=2]->.bg;
                 (
-                  nwr["place"~"^(city|town|village|hamlet|isolated_dwelling|suburb|neighbourhood|quarter)$"](area.bg);
-                  nwr["shop"~"^(supermarket|convenience|electronics|computer|appliance|furniture|homeware|hardware|doityourself|department_store)$"](area.bg);
-                  nwr["amenity"="fuel"](area.bg);
+                  nwr["name"~"(?i)($retailerPattern)"](area.bg);
+                  nwr["brand"~"(?i)($retailerPattern)"](area.bg);
+                  nwr["brand:en"~"(?i)($retailerPattern)"](area.bg);
+                  nwr["operator"~"(?i)($retailerPattern)"](area.bg);
                 );
                 out center tags;
             """.trimIndent()
-            val response = client.post()
-                .uri(overpassUrl)
-                .header("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-                .body("data=" + java.net.URLEncoder.encode(query, Charsets.UTF_8))
-                .retrieve()
-                .body(String::class.java)
-                ?: error("Empty Overpass response")
-            val elements = mapper.readTree(response).path("elements")
-            require(elements.isArray) { "Overpass response did not contain an elements array" }
-            val allElements = elements.toList()
+
+            // Keep the country-wide queries small: settlement names and only the
+            // retailer brands already present in the BG Prices catalogue.
+            val localityElements = fetchElements(localityQuery, "inhabited places")
+            val branchElements = fetchElements(branchQuery, "known retailer branches")
             var localitiesImported = 0
             var branchesImported = 0
             var branchesSkipped = 0
 
-            // Import settlements first so stores without addr:city can be linked to a
-            // nearby mapped locality, without inventing a city or a street address.
-            allElements.forEach { element ->
+            localityElements.forEach { element ->
                 val tags = element.path("tags")
                 if (tags.isMissingNode || !tags.isObject) return@forEach
                 val place = tags.path("place").asText("")
                 val name = tags.path("name").asText("").trim().take(180)
-                val sourceId = sourceId(element)
                 val lat = coordinate(element, "lat")
                 val lon = coordinate(element, "lon")
                 if (place.isNotBlank() && name.isNotBlank() && lat != null && lon != null) {
-                    upsertLocality(sourceId, name, tags, place, lat, lon)
+                    upsertLocality(sourceId(element), name, tags, place, lat, lon)
                     localitiesImported++
                 }
             }
 
-            allElements.forEach { element ->
+            branchElements.forEach { element ->
                 val tags = element.path("tags")
                 if (tags.isMissingNode || !tags.isObject) return@forEach
-                if (tags.path("place").asText("").isNotBlank()) return@forEach
                 val lat = coordinate(element, "lat")
                 val lon = coordinate(element, "lon")
                 if (lat == null || lon == null) {
@@ -165,6 +165,21 @@ class OpenStreetMapImportJob(
             )
             throw exception
         }
+    }
+
+    private fun fetchElements(query: String, description: String): List<JsonNode> {
+        log.info("Requesting OpenStreetMap {}", description)
+        val response = client.post()
+            .uri(overpassUrl)
+            .header("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+            .body("data=" + java.net.URLEncoder.encode(query, Charsets.UTF_8))
+            .retrieve()
+            .body(String::class.java)
+            ?: error("Empty Overpass response for $description")
+        val elements = mapper.readTree(response).path("elements")
+        require(elements.isArray) { "Overpass response for $description did not contain an elements array" }
+        log.info("Received {} OpenStreetMap elements for {}", elements.size(), description)
+        return elements.toList()
     }
 
     private fun sourceId(element: JsonNode): String =

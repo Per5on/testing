@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalUriHandler
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -32,6 +33,7 @@ import retrofit2.http.POST
 import retrofit2.http.Body
 import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
+import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -65,6 +67,9 @@ private val translations = mapOf(
         "store_overview" to "ЦЕНИ ПО МАГАЗИНИ", "pending" to "Няма данни за цени",
         "no_live" to "Все още няма потвърдени актуални цени",
         "demo_prices" to "Демонстрационен изглед · Не се показват актуални цени от търговци.",
+        "loading_prices" to "Зареждане на цени...", "no_verified_prices" to "Няма потвърдени актуални цени за избрания филтър.",
+        "offer_disclaimer" to "Оферти от официални сайтове на търговци. Наличността и приложимостта може да се различават по магазин.",
+        "offer_source" to "Оферта от официален сайт", "source_details" to "Отвори източника", "retry" to "Опитай отново", "was" to "Редовна цена:"
         "basket_sub" to "Списъци · сравнения · спестявания",
         "current_category" to "Текуща категория: ", "no_store_filter" to "Няма избран магазин в Категории: показват се всички магазини от категорията.",
         "store_filter" to "Филтър от Категории: ", "prices_by_store" to "ЦЕНИ ПО МАГАЗИНИ",
@@ -118,6 +123,9 @@ private val translations = mapOf(
         "store_overview" to "STORE PRICE OVERVIEW", "pending" to "Price data pending",
         "no_live" to "No verified live prices yet",
         "demo_prices" to "Demo layout only · no live retailer prices are displayed.",
+        "loading_prices" to "Loading prices...", "no_verified_prices" to "No verified current prices match this filter.",
+        "offer_disclaimer" to "Offers from official retailer websites. Stock and branch availability may vary.",
+        "offer_source" to "Official retailer offer", "source_details" to "Open source", "retry" to "Try again", "was" to "Regular price:"
         "basket_sub" to "Lists · comparisons · savings",
         "current_category" to "Current category: ", "no_store_filter" to "No store selected in Categories: showing all stores in this category.",
         "store_filter" to "Store filter from Categories: ", "prices_by_store" to "PRICES BY STORE",
@@ -201,8 +209,43 @@ private data class CatalogRetailerDto(val code: String, val name: String, val we
 private data class LocalitySuggestionDto(val id: String, val name: String, val nameBg: String?, val type: String, val municipality: String?, val region: String?)
 private data class SubmissionRequestDto(val type: String, val content: String, val locationLabel: String?, val latitude: Double?, val longitude: Double?)
 private data class SubmissionAcceptedDto(val id: String, val status: String)
+private data class PriceCatalogItemDto(
+    val productId: String,
+    val categoryCode: String,
+    val productName: String,
+    val brand: String? = null,
+    val variant: String? = null,
+    val packageQuantity: Double? = null,
+    val packageUnit: String? = null,
+    val retailerCode: String,
+    val retailerName: String,
+    val branchName: String? = null,
+    val city: String,
+    val settlement: String? = null,
+    val address: String? = null,
+    val priceEur: Double,
+    val regularPriceEur: Double? = null,
+    val currency: String = "EUR",
+    val source: String,
+    val sourceReference: String? = null,
+    val priceNote: String? = null,
+    val verified: Boolean,
+    val collectedAt: String,
+    val validUntil: String? = null
+)
 
 private interface CatalogApi {
+    @GET("api/v1/prices/catalog")
+    suspend fun getPriceCatalog(
+        @Query("categoryCode") categoryCode: String,
+        @Query("locality") locality: String? = null,
+        @Query("latitude") latitude: Double? = null,
+        @Query("longitude") longitude: Double? = null,
+        @Query("radiusKm") radiusKm: Int = 10,
+        @Query("retailerName") retailerName: String? = null,
+        @Query("limit") limit: Int = 100
+    ): List<PriceCatalogItemDto>
+
     @GET("api/v1/catalog")
     suspend fun getCatalog(
         @Query("locality") locality: String? = null,
@@ -245,9 +288,9 @@ private fun BgPricesApp() {
             Retrofit.Builder()
                 .baseUrl(if (base.endsWith("/")) base else "$base/")
                 .client(OkHttpClient.Builder()
-                    .connectTimeout(5, TimeUnit.SECONDS)
-                    .readTimeout(15, TimeUnit.SECONDS)
-                    .callTimeout(20, TimeUnit.SECONDS)
+                    .connectTimeout(10, TimeUnit.SECONDS)
+                    .readTimeout(75, TimeUnit.SECONDS)
+                    .callTimeout(90, TimeUnit.SECONDS)
                     .build())
                 .addConverterFactory(GsonConverterFactory.create())
                 .build().create(CatalogApi::class.java)
@@ -394,7 +437,7 @@ private fun BgPricesApp() {
                     if (destination == Destination.CATEGORIES) {
                         CategoryContent(categories[selectedCategory], profileView, selectedRetailer, language, catalogMessage) { selectedRetailer = if (selectedRetailer == it) null else it }
                     } else {
-                        PricingContent(categories[selectedCategory], selectedRetailer, language, locationLabel)
+                        PricingContent(categories[selectedCategory], selectedRetailer, language, locationLabel, catalogApi, locationCoordinates, radius)
                     }
                 }
                 Destination.BASKET -> BasketContent(
@@ -525,7 +568,57 @@ if (category.retailers.isEmpty()) {
 }
 
 @Composable
-private fun PricingContent(category: PriceCategory, selectedRetailer: String?, language: String, location: String) {
+private fun PricingContent(
+    category: PriceCategory,
+    selectedRetailer: String?,
+    language: String,
+    location: String,
+    api: CatalogApi?,
+    coordinates: String,
+    radius: Int
+) {
+    var priceItems by remember(category.key, selectedRetailer, location, coordinates) {
+        mutableStateOf(emptyList<PriceCatalogItemDto>())
+    }
+    var loading by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    var refresh by remember { mutableIntStateOf(0) }
+    val uriHandler = LocalUriHandler.current
+
+    LaunchedEffect(category.key, selectedRetailer, language, location, coordinates, radius, api, refresh) {
+        if (api == null) {
+            priceItems = emptyList()
+            failed = false
+            return@LaunchedEffect
+        }
+        loading = true
+        failed = false
+        try {
+            val parsed = coordinates.split(",").mapNotNull { it.trim().toDoubleOrNull() }
+            val hasCoordinates = parsed.size == 2
+            val ignoredLabels = listOf(
+                tr(language, "nearby"),
+                tr(language, "permission_denied"),
+                tr(language, "location_unavailable")
+            )
+            val locality = location.takeIf { it.isNotBlank() && it !in ignoredLabels && !hasCoordinates }
+            priceItems = api.getPriceCatalog(
+                categoryCode = category.key,
+                locality = locality,
+                latitude = if (hasCoordinates) parsed[0] else null,
+                longitude = if (hasCoordinates) parsed[1] else null,
+                radiusKm = radius,
+                retailerName = selectedRetailer,
+                limit = 100
+            )
+        } catch (_: Exception) {
+            priceItems = emptyList()
+            failed = true
+        } finally {
+            loading = false
+        }
+    }
+
     Text(tr(language, "prices_for") + category.title(language), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     Text(tr(language, "prices_promos_history"), style = MaterialTheme.typography.bodyMedium)
     Text(tr(language, "location") + ": " + location.ifBlank { tr(language, "all_locations") }, style = MaterialTheme.typography.labelSmall, color = DeepOrange)
@@ -537,24 +630,64 @@ private fun PricingContent(category: PriceCategory, selectedRetailer: String?, l
         }
     }
     Spacer(Modifier.height(8.dp))
-    Text(tr(language, "store_overview"), style = MaterialTheme.typography.labelLarge, color = DeepLeaf, fontWeight = FontWeight.Bold)
-    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(category.retailers.filter { selectedRetailer == null || it == selectedRetailer }) { retailer ->
-            Card(colors = CardDefaults.cardColors(containerColor = Leaf)) {
-                Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                    Text(retailer, fontWeight = FontWeight.SemiBold)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(tr(language, "pending"), color = DeepOrange)
-                        Text("EUR", color = DeepLeaf, fontWeight = FontWeight.Bold)
+    Text(tr(language, "offer_disclaimer"), style = MaterialTheme.typography.labelSmall, color = DeepOrange)
+    Spacer(Modifier.height(8.dp))
+
+    when {
+        api == null -> Text(tr(language, "catalog_config_missing"), color = DeepOrange)
+        loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+            Text(tr(language, "loading_prices"))
+        }
+        failed -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(tr(language, "catalog_error"), color = MaterialTheme.colorScheme.error)
+            TextButton(onClick = { refresh++ }) { Text(tr(language, "retry")) }
+        }
+        priceItems.isEmpty() -> Text(tr(language, "no_verified_prices"), color = DeepOrange)
+        else -> LazyColumn(
+            Modifier.fillMaxWidth().heightIn(max = 520.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(priceItems, key = { "${it.productId}-${it.retailerCode}-${it.city}-${it.branchName ?: ""}" }) { item ->
+                Card(colors = CardDefaults.cardColors(containerColor = Leaf)) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            (item.brand?.let { "$it " } ?: "") + item.productName,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            item.retailerName + " · " + (item.branchName?.takeIf { it.isNotBlank() }
+                                ?: item.settlement?.takeIf { it.isNotBlank() } ?: item.city),
+                            color = DeepOrange,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        if (!item.address.isNullOrBlank()) {
+                            Text(item.address, style = MaterialTheme.typography.labelSmall)
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(String.format(Locale.US, "€ %.2f", item.priceEur), color = DeepLeaf, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                            if (item.regularPriceEur != null && item.regularPriceEur > item.priceEur) {
+                                Text(tr(language, "was") + " " + String.format(Locale.US, "€ %.2f", item.regularPriceEur), style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        if (!item.priceNote.isNullOrBlank()) {
+                            Text(item.priceNote, color = DeepOrange, style = MaterialTheme.typography.labelSmall)
+                        }
+                        Text(tr(language, "offer_source") + " · " + item.collectedAt.take(10), style = MaterialTheme.typography.labelSmall)
+                        item.sourceReference?.takeIf { it.startsWith("https://") }?.let { source ->
+                            Text(
+                                tr(language, "source_details"),
+                                color = DeepLeaf,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.clickable { runCatching { uriHandler.openUri(source) } }
+                            )
+                        }
                     }
-                    Text(tr(language, "no_live"), style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
     }
-    Text(tr(language, "demo_prices"), style = MaterialTheme.typography.labelSmall, color = DeepOrange)
 }
-
 @Composable
 private fun BasketContent(
     category: PriceCategory,

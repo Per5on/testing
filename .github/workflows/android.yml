@@ -20,7 +20,7 @@ jobs:
     env:
       APP_VERSION_CODE: ${{ github.run_number }}
       APP_VERSION_NAME: 0.1.${{ github.run_number }}.preview
-      BG_PRICES_API_BASE_URL: ${{ vars.BG_PRICES_API_BASE_URL }}
+      BG_PRICES_API_BASE_URL: ${{ vars.BG_PRICES_API_BASE_URL || 'https://bg-prices-preview-api.onrender.com/' }}
     steps:
       - name: Check out source
         uses: actions/checkout@v5
