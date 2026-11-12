@@ -79,7 +79,7 @@ private val defaultCategories = listOf(
 
 private enum class Destination(val label: String, val symbol: String) {
     CATEGORIES("Categories", "▦"), PRICING("Pricing", "€"), ADD("Add", "+"),
-    BASKET("Basket", "🛒"), USER("User", "●")
+    BASKET("Basket", "🛒"), USER("Profile", "●")
 }
 
 class MainActivity : ComponentActivity() {
@@ -136,7 +136,7 @@ private fun BgPricesApp() {
             Spacer(Modifier.height(14.dp))
             when (destination) {
                 Destination.CATEGORIES, Destination.PRICING -> {
-                    CategoryRibbon(categories, selectedCategory, onSelect = { selectedCategory = it }, onMove = { from, to ->
+                    CategoryRibbon(categories, selectedCategory, onSelect = { selectedCategory = it; selectedRetailer = null }, onMove = { from, to ->
                         if (to in categories.indices) {
                             val moved = categories.removeAt(from)
                             categories.add(to, moved)
@@ -150,7 +150,7 @@ private fun BgPricesApp() {
                         PricingContent(categories[selectedCategory], selectedRetailer)
                     }
                 }
-                Destination.BASKET -> BasketContent()
+                Destination.BASKET -> BasketContent(categories[selectedCategory], selectedRetailer)
                 Destination.USER -> UserContent(profileView, onViewChange = { profileView = it })
                 Destination.ADD -> Unit
             }
@@ -236,7 +236,6 @@ private fun CategoryContent(category: PriceCategory, view: String, selectedRetai
 }
 
 @Composable
-@Composable
 private fun PricingContent(category: PriceCategory, selectedRetailer: String?) {
     Text("Pricing · ${category.title}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     Text("Prices, promotions and price history", style = MaterialTheme.typography.bodyMedium)
@@ -250,7 +249,7 @@ private fun PricingContent(category: PriceCategory, selectedRetailer: String?) {
     Spacer(Modifier.height(10.dp))
     Text("STORE PRICE OVERVIEW", style = MaterialTheme.typography.labelLarge, color = DeepLeaf, fontWeight = FontWeight.Bold)
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(category.retailers) { retailer ->
+        items(category.retailers.filter { selectedRetailer == null || it == selectedRetailer }) { retailer ->
             Card(colors = CardDefaults.cardColors(containerColor = Leaf)) {
                 Column(Modifier.fillMaxWidth().padding(12.dp)) {
                     Text(retailer, fontWeight = FontWeight.SemiBold)
@@ -267,14 +266,34 @@ private fun PricingContent(category: PriceCategory, selectedRetailer: String?) {
 }
 
 @Composable
-private fun BasketContent() {
+private fun BasketContent(category: PriceCategory, selectedRetailer: String?) {
     Text("Basket", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     Text("Lists · comparisons · savings", style = MaterialTheme.typography.bodyMedium)
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(8.dp))
+    Card(colors = CardDefaults.cardColors(containerColor = Orange)) {
+        Column(Modifier.padding(12.dp)) {
+            Text("Current category: ${category.title}", fontWeight = FontWeight.Bold, color = DeepOrange)
+            Text(if (selectedRetailer == null) "No store selected in Categories: showing the category's full store comparison." else "Store filter from Categories: $selectedRetailer")
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    Text("PRICES BY STORE", style = MaterialTheme.typography.labelLarge, color = DeepLeaf, fontWeight = FontWeight.Bold)
+    LazyColumn(modifier = Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(category.retailers.filter { selectedRetailer == null || it == selectedRetailer }) { retailer ->
+            Card(colors = CardDefaults.cardColors(containerColor = Leaf)) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(retailer, fontWeight = FontWeight.SemiBold)
+                    Text("Price data pending · EUR", color = DeepOrange, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
+    Spacer(Modifier.height(8.dp))
     InfoCard("Your shopping lists", "Create and manage product lists for your next shop.")
-    InfoCard("Cheapest single-store basket", "Compare the total cost of your list at each retailer.")
-    InfoCard("Cheapest combined basket", "Find a lower total by splitting items across stores.")
-    InfoCard("Savings overview", "Your estimated savings will appear when verified prices are available.")
+    InfoCard("Cheapest single-store basket", "Compare your basket total at every store in the selected category.")
+    InfoCard("Cheapest combined basket", "Compare a basket split across stores in the selected category.")
+    InfoCard("Savings overview", "Estimated savings will appear when verified prices are available.")
+    Text("Demo layout only · no live prices or calculated savings yet.", style = MaterialTheme.typography.labelSmall, color = DeepOrange)
 }
 
 @Composable
