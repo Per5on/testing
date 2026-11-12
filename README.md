@@ -47,6 +47,36 @@ Submissions are anonymous and stored with PENDING status. The preview does not e
 - Import batching, stale-branch reconciliation and runtime monitoring remain to be completed before production.
 - Retailer prices and promotions are a separate pipeline. Preferred order: official retailer API/feed or permitted partner feed; otherwise reviewed admin/user submissions with source and validity timestamps. Do not scrape retailer websites unless their terms permit it.
 
+## Run a real-data local demo
+
+The repository includes a local PostgreSQL + API setup. It starts with an empty, migrated database; it does not insert fake stores, products or prices.
+
+1. Install Docker Desktop or Docker Engine with the Compose plugin.
+2. Copy `.env.example` to `.env` and keep the local-only defaults unless you need to change them.
+3. Start PostgreSQL and the API:
+
+   ```sh
+   docker compose up --build -d api
+   ```
+
+4. Run the one-shot OpenStreetMap import (this needs outbound internet access and may take several minutes):
+
+   ```sh
+   docker compose --profile import run --rm osm-import
+   ```
+
+5. Check the service and imported locality catalogue:
+
+   ```sh
+   curl http://localhost:8080/actuator/health
+   curl "http://localhost:8080/api/v1/localities?query=Veliko"
+   curl "http://localhost:8080/api/v1/catalog?locality=Veliko%20Tarnovo"
+   ```
+
+The importer uses OpenStreetMap community data and retains OSM source IDs. Some branches will be absent where the map does not contain a reliable retailer match or a locality within 25 km. OSM is not a retailer price feed: product prices and product photos remain unavailable until a permitted, verifiable source is integrated. The API must report those gaps rather than fabricate content. OSM attribution is required in any public demo.
+
+The local Compose database is for development/demo use only. Do not expose its PostgreSQL port publicly or reuse the example password in a hosted environment. For the Android emulator, build with `-PBG_PRICES_API_BASE_URL=http://10.0.2.2:8080/`. For a physical Android device, use the development computer's reachable LAN address. The preview APK distributed to users must use the hosted HTTPS API URL, not localhost or a private LAN address.
+
 ## Backend configuration
 - PostgreSQL connection: `DB_URL`, `DB_USER`, `DB_PASSWORD`.
 - Connection pool maximum: `DB_POOL_MAX` (default 5).
