@@ -4,7 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.scheduling.annotation.Scheduled
+import org.springframework.transaction.annotation.Transactional
+import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 
@@ -14,8 +15,13 @@ class OpenStreetMapImportJob(
     private val mapper: ObjectMapper
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val requestFactory = SimpleClientHttpRequestFactory().apply {
+        setConnectTimeout(10_000)
+        setReadTimeout(240_000)
+    }
     private val client = RestClient.builder()
-        .defaultHeader("User-Agent", "BGPrices/0.1 (OpenStreetMap location catalogue)")
+        .requestFactory(requestFactory)
+        .defaultHeader("User-Agent", "BGPrices/0.1-preview (OpenStreetMap location catalogue; contact: support@bgprices.app)")
         .build()
 
     private val retailers = listOf(
@@ -59,11 +65,8 @@ class OpenStreetMapImportJob(
         RetailerMatch("insa_oil", "Insa Oil", listOf("insa oil", "insaoil"))
     )
 
-    @Scheduled(
-        initialDelayString = "\${catalog.osm.initial-delay-ms:60000}",
-        fixedDelayString = "\${catalog.osm.refresh-ms:43200000}"
-    )
-    fun refreshMapData() {
+    @Transactional
+    fun importOnce() {
         try {
             val query = """
                 [out:json][timeout:180];
