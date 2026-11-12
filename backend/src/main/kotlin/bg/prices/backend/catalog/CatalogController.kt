@@ -1,6 +1,7 @@
 package bg.prices.backend.catalog
 
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -12,6 +13,7 @@ import java.time.Instant
 class CatalogController(private val jdbc: JdbcTemplate) {
 
     @GetMapping
+    @Cacheable(cacheNames = ["catalog"], key = "#locality + ':' + #latitude + ':' + #longitude + ':' + #radiusKm")
     fun catalog(
         @RequestParam(required = false) locality: String?,
         @RequestParam(required = false) latitude: Double?,
