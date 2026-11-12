@@ -60,8 +60,8 @@ class OpenStreetMapImportJob(
     )
 
     @Scheduled(
-        initialDelayString = "${catalog.osm.initial-delay-ms:60000}",
-        fixedDelayString = "${catalog.osm.refresh-ms:43200000}"
+        initialDelayString = "\${catalog.osm.initial-delay-ms:60000}",
+        fixedDelayString = "\${catalog.osm.refresh-ms:43200000}"
     )
     fun refreshMapData() {
         try {
