@@ -12,8 +12,8 @@ android {
     defaultConfig {
         applicationId = "bg.prices"
         val apiBaseUrl = providers.gradleProperty("BG_PRICES_API_BASE_URL").orElse("").get()
-        buildConfigField("String", "API_BASE_URL", "\"${apiBaseUrl}\"")
-        minSdk = 26
+        buildConfigField("String", "API_BASE_URL", "\"\${apiBaseUrl}\"")
+        minSdk = 29
         targetSdk = 35
         // GitHub Actions supplies a monotonically increasing build number.
         // Local Android Studio builds keep the defaults below.
