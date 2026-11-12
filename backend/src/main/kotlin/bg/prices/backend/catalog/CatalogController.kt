@@ -40,7 +40,7 @@ class CatalogController(private val jdbc: JdbcTemplate) {
                 retailers = availableRetailers(code, locality?.trim()?.takeIf { it.isNotBlank() }, latitude, longitude, radiusKm)
             )
         }
-        return CatalogResponse(categories = categories, generatedAt = Instant.now().toString())
+        return CatalogResponse(categories = categories, generatedAt = Instant.now().toString(), branchDataSource = "OpenStreetMap contributors", branchRefreshIntervalHours = 12)
     }
 
     private fun availableRetailers(
