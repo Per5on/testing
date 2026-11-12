@@ -10,7 +10,7 @@ class BranchService(private val repository: BranchRepository) {
     fun inLocality(locality: String?): List<BranchResponse> {
         val name = locality?.trim().orEmpty()
         if (name.isBlank()) return emptyList()
-        return repository.findByLocality(name).take(200).map { it.toResponse() }
+        return repository.findByLocality(name, PageRequest.of(0, 200)).map { it.toResponse() }
     }
 
     @Transactional(readOnly = true)
