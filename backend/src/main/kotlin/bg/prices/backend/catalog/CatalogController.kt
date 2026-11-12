@@ -101,7 +101,9 @@ class CatalogController(private val jdbc: JdbcTemplate) {
 
 data class CatalogResponse(
     val categories: List<CatalogCategory>,
-    val generatedAt: String
+    val generatedAt: String,
+    val branchDataSource: String,
+    val branchRefreshIntervalHours: Int
 )
 
 data class CatalogCategory(
