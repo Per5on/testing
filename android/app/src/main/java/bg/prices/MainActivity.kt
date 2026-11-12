@@ -84,6 +84,7 @@ private val translations = mapOf(
         "invalid_location" to "Въведи град/село или валидни координати.",
         "no_stores_here" to "Няма потвърдени магазини от тази категория в избраното населено място.",
         "catalog_config_missing" to "Каталогът ще се зареди след свързване с BG Prices сървъра.",
+        "choose_location_first" to "Избери населено място или текущо местоположение, за да видиш наличните магазини.",
         "catalog_error" to "Каталогът временно не е достъпен. Провери връзката и опитай отново.",
         "location_all" to "Всички локации", "nearby" to "Близо до мен",
         "location_saved" to "Местоположението е запазено", "choose_location" to "Избор на местоположение"
@@ -131,6 +132,7 @@ private val translations = mapOf(
         "invalid_location" to "Enter a city/town or valid coordinates.",
         "no_stores_here" to "No verified stores in this category are available at the selected location.",
         "catalog_config_missing" to "The catalogue will load once the BG Prices server is connected.",
+        "choose_location_first" to "Choose an inhabited place or your current location to see available stores.",
         "catalog_error" to "The catalogue is temporarily unavailable. Check the connection and try again.",
         "location_all" to "All locations", "nearby" to "Near me",
         "location_saved" to "Location saved", "choose_location" to "Choose location"
@@ -284,7 +286,7 @@ private fun BgPricesApp() {
                 if (selectedRetailer != null && categories.getOrNull(selectedCategory)?.retailers?.contains(selectedRetailer) != true) {
                     selectedRetailer = null
                 }
-                catalogMessage = if (categories.none { it.retailers.isNotEmpty() }) tr(language, "no_stores_here") else ""
+                catalogMessage = if (locality == null && !hasCoordinates) tr(language, "choose_location_first") else if (categories.none { it.retailers.isNotEmpty() }) tr(language, "no_stores_here") else ""
             } catch (_: Exception) {
                 categories.replaceAll { it.copy(retailers = emptyList()) }
                 catalogMessage = tr(language, "catalog_error")
