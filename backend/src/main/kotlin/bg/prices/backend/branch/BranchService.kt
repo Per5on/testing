@@ -1,6 +1,7 @@
 package bg.prices.backend.branch
 
 import org.springframework.stereotype.Service
+import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.annotation.Transactional
 
 @Service
@@ -9,14 +10,14 @@ class BranchService(private val repository: BranchRepository) {
     fun inLocality(locality: String?): List<BranchResponse> {
         val name = locality?.trim().orEmpty()
         if (name.isBlank()) return emptyList()
-        return repository.findByLocality(name).map { it.toResponse() }
+        return repository.findByLocality(name).take(200).map { it.toResponse() }
     }
 
     @Transactional(readOnly = true)
     fun searchLocalities(query: String): List<LocalitySuggestion> {
         val term = query.trim()
         if (term.length < 2) return emptyList()
-        return repository.searchLocality(term)
+        return repository.searchLocality(term, PageRequest.of(0, 50))
             .distinctBy { listOf(it.city.lowercase(), it.settlement?.lowercase(), it.localityType) }
             .take(30)
             .map {
