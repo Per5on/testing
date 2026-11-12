@@ -123,7 +123,7 @@ private val translations = mapOf(
         "moderation" to "Moderation queue", "app_settings" to "App settings",
         "category_order" to "Category display order", "location_settings" to "Location settings",
         "add_title" to "Add to BG Prices", "suggestion" to "Suggestion", "note" to "Note",
-        "feedback" to "Opinion", "describe" to "Describe: ", "review_note" to "Submissions will be reviewed before appearing in the catalogue.",
+        "opinion" to "Opinion", "describe" to "Describe: ", "review_note" to "Submissions will be reviewed before appearing in the catalogue.",
         "submit" to "Submit", "cancel" to "Cancel", "location_filter" to "Location filter",
         "city_town" to "Inhabited place (city, town, village, etc.)", "coordinates" to "Coordinates", "current_location" to "Use current location",
         "city_placeholder" to "e.g. Veliko Tarnovo, Arbanasi, Kilifarevo", "coordinates_placeholder" to "Latitude, longitude (e.g. 43.0757, 25.6172)",
