@@ -23,6 +23,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.GET
+import retrofit2.http.Query
 
 private val Leaf = Color(0xFFE5F3E5)
 private val DeepLeaf = Color(0xFF356B43)
@@ -69,7 +73,7 @@ private val translations = mapOf(
         "moderation" to "Опашка за модерация", "app_settings" to "Настройки на приложението",
         "category_order" to "Подредба на категориите", "location_settings" to "Настройки на местоположението",
         "add_title" to "Добави в BG Prices", "suggestion" to "Предложение", "note" to "Бележка",
-        "feedback" to "Обратна връзка", "describe" to "Опиши: ", "review_note" to "Предложенията ще бъдат прегледани преди да се добавят в каталога.",
+        "opinion" to "Мнение", "describe" to "Опиши: ", "review_note" to "Предложенията ще бъдат прегледани преди да се добавят в каталога.",
         "submit" to "Изпрати", "cancel" to "Отказ", "location_filter" to "Филтър по местоположение",
         "city_town" to "Населено място (град, село и др.)", "coordinates" to "Координати", "current_location" to "Използвай текущото местоположение",
         "city_placeholder" to "Напр. Велико Търново, Арбанаси, Килифарево", "coordinates_placeholder" to "Ширина, дължина (напр. 43.0757, 25.6172)",
@@ -78,6 +82,9 @@ private val translations = mapOf(
         "permission_denied" to "Няма разрешение за местоположение. Можеш да въведеш град или координати ръчно.",
         "location_unavailable" to "Няма налични координати от устройството. Провери дали услугите за местоположение са включени или въведи координати ръчно.",
         "invalid_location" to "Въведи град/село или валидни координати.",
+        "no_stores_here" to "Няма потвърдени магазини от тази категория в избраното населено място.",
+        "catalog_config_missing" to "Каталогът ще се зареди след свързване с BG Prices сървъра.",
+        "catalog_error" to "Каталогът временно не е достъпен. Провери връзката и опитай отново.",
         "location_all" to "Всички локации", "nearby" to "Близо до мен",
         "location_saved" to "Местоположението е запазено", "choose_location" to "Избор на местоположение"
     ),
@@ -113,7 +120,7 @@ private val translations = mapOf(
         "moderation" to "Moderation queue", "app_settings" to "App settings",
         "category_order" to "Category display order", "location_settings" to "Location settings",
         "add_title" to "Add to BG Prices", "suggestion" to "Suggestion", "note" to "Note",
-        "feedback" to "Feedback", "describe" to "Describe: ", "review_note" to "Submissions will be reviewed before appearing in the catalogue.",
+        "feedback" to "Opinion", "describe" to "Describe: ", "review_note" to "Submissions will be reviewed before appearing in the catalogue.",
         "submit" to "Submit", "cancel" to "Cancel", "location_filter" to "Location filter",
         "city_town" to "Inhabited place (city, town, village, etc.)", "coordinates" to "Coordinates", "current_location" to "Use current location",
         "city_placeholder" to "e.g. Veliko Tarnovo, Arbanasi, Kilifarevo", "coordinates_placeholder" to "Latitude, longitude (e.g. 43.0757, 25.6172)",
@@ -122,6 +129,9 @@ private val translations = mapOf(
         "permission_denied" to "Location permission was not granted. You can enter a city or coordinates manually.",
         "location_unavailable" to "No device coordinates are available. Check that location services are enabled or enter coordinates manually.",
         "invalid_location" to "Enter a city/town or valid coordinates.",
+        "no_stores_here" to "No verified stores in this category are available at the selected location.",
+        "catalog_config_missing" to "The catalogue will load once the BG Prices server is connected.",
+        "catalog_error" to "The catalogue is temporarily unavailable. Check the connection and try again.",
         "location_all" to "All locations", "nearby" to "Near me",
         "location_saved" to "Location saved", "choose_location" to "Choose location"
     )
@@ -141,6 +151,28 @@ private val defaultCategories = listOf(
     PriceCategory("home", "home_sub", listOf("HomeMax", "Bauhaus", "IKEA", "JYSK", "Mr. Bricolage", "Praktiker", "Praktis", "Videnov", "Mondo")),
     PriceCategory("fuel", "fuel_sub", listOf("Цените на горивата ще се показват при наличие на потвърдени данни"))
 )
+
+
+private data class CatalogPayload(val categories: List<CatalogCategoryDto> = emptyList())
+private data class CatalogCategoryDto(
+    val code: String,
+    val nameBg: String,
+    val nameEn: String,
+    val descriptionBg: String,
+    val descriptionEn: String,
+    val retailers: List<CatalogRetailerDto> = emptyList()
+)
+private data class CatalogRetailerDto(val code: String, val name: String, val websiteUrl: String? = null)
+
+private interface CatalogApi {
+    @GET("api/v1/catalog")
+    suspend fun getCatalog(
+        @Query("locality") locality: String? = null,
+        @Query("latitude") latitude: Double? = null,
+        @Query("longitude") longitude: Double? = null,
+        @Query("radiusKm") radiusKm: Int = 10
+    ): CatalogPayload
+}
 
 private enum class Destination { CATEGORIES, PRICING, ADD, BASKET, PROFILE }
 
@@ -163,7 +195,7 @@ private fun BgPricesApp() {
     var locationLabel by remember { mutableStateOf(prefs.getString("location_label", "") ?: "") }
     var locationCoordinates by remember { mutableStateOf(prefs.getString("location_coordinates", "") ?: "") }
     var radius by remember { mutableStateOf(prefs.getInt("location_radius", 10)) }
-    val categories = remember { mutableStateListOf<PriceCategory>().apply { addAll(defaultCategories) } }
+    val categories = remember { mutableStateListOf<PriceCategory>().apply { addAll(defaultCategories.map { it.copy(retailers = emptyList()) }) } }\n    var catalogMessage by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableIntStateOf(0) }
     var destination by remember { mutableStateOf(Destination.CATEGORIES) }
     var selectedRetailer by remember { mutableStateOf<String?>(null) }
@@ -248,7 +280,7 @@ private fun BgPricesApp() {
                     })
                     Spacer(Modifier.height(10.dp))
                     if (destination == Destination.CATEGORIES) {
-                        CategoryContent(categories[selectedCategory], profileView, selectedRetailer, language) { selectedRetailer = if (selectedRetailer == it) null else it }
+                        CategoryContent(categories[selectedCategory], profileView, selectedRetailer, language, catalogMessage) { selectedRetailer = if (selectedRetailer == it) null else it }
                     } else {
                         PricingContent(categories[selectedCategory], selectedRetailer, language, locationLabel)
                     }
@@ -283,7 +315,7 @@ private fun BgPricesApp() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        listOf("suggestion", "note", "feedback").forEach { key ->
+                        listOf("suggestion", "note", "opinion").forEach { key ->
                             FilterChip(selected = addType == key, onClick = { addType = key }, label = { Text(tr(language, key)) })
                         }
                     }
@@ -315,7 +347,7 @@ private fun CategoryRibbon(categories: List<PriceCategory>, selected: Int, langu
 }
 
 @Composable
-private fun CategoryContent(category: PriceCategory, view: String, selectedRetailer: String?, language: String, onRetailerSelect: (String) -> Unit) {
+private fun CategoryContent(category: PriceCategory, view: String, selectedRetailer: String?, language: String, emptyMessage: String, onRetailerSelect: (String) -> Unit) {
     Text(category.title(language), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     Text(category.subtitle(language), style = MaterialTheme.typography.bodyMedium)
     Spacer(Modifier.height(10.dp))
