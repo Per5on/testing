@@ -218,7 +218,7 @@ private interface CatalogApi {
     suspend fun submit(@Body request: SubmissionRequestDto): SubmissionAcceptedDto
 }
 
-private enum class Destination { CATEGORIES, PRICING, ADD, BASKET, PROFILE }
+private enum class Destination { CATEGORIES, PRICING, BASKET, PROFILE }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -351,12 +351,12 @@ private fun BgPricesApp() {
             NavigationBar(containerColor = Color.White) {
                 listOf(
                     Destination.CATEGORIES to "categories", Destination.PRICING to "pricing",
-                    Destination.ADD to "add", Destination.BASKET to "basket", Destination.PROFILE to "profile"
+                    Destination.BASKET to "basket", Destination.PROFILE to "profile"
                 ).forEach { (item, key) ->
                     NavigationBarItem(
                         selected = destination == item,
-                        onClick = { if (item == Destination.ADD) { addStatus = ""; showAddDialog = true } else destination = item },
-                        icon = { Text(when (item) { Destination.CATEGORIES -> "▦"; Destination.PRICING -> "€"; Destination.ADD -> "+"; Destination.BASKET -> "🛒"; Destination.PROFILE -> "●" }, fontWeight = FontWeight.Bold) },
+                        onClick = { destination = item },
+                        icon = { Text(when (item) { Destination.CATEGORIES -> "▦"; Destination.PRICING -> "€"; Destination.BASKET -> "🛒"; Destination.PROFILE -> "●" }, fontWeight = FontWeight.Bold) },
                         label = { Text(tr(language, key)) }
                     )
                 }
@@ -403,8 +403,7 @@ private fun BgPricesApp() {
                     onQuantityChange = { id, delta -> scope.launch { database.basketDao().changeQuantity(id, delta) } },
                     onRemove = { id -> scope.launch { database.basketDao().delete(id) } }
                 )
-                Destination.PROFILE -> ProfileContent(profileView, language, onViewChange = { profileView = it }, onLanguageChange = { language = it }, onLocationClick = { showLocationDialog = true })
-                Destination.ADD -> Unit
+                Destination.PROFILE -> ProfileContent(profileView, language, onViewChange = { profileView = it }, onLanguageChange = { language = it }, onLocationClick = { showLocationDialog = true }, onAddClick = { addStatus = ""; showAddDialog = true })
             }
         }
     }
@@ -614,9 +613,19 @@ private fun BasketContent(
     InfoCard(tr(language, "savings"), tr(language, "savings_desc"))
 }
 @Composable
-private fun ProfileContent(view: String, language: String, onViewChange: (String) -> Unit, onLanguageChange: (String) -> Unit, onLocationClick: () -> Unit) {
+private fun ProfileContent(view: String, language: String, onViewChange: (String) -> Unit, onLanguageChange: (String) -> Unit, onLocationClick: () -> Unit, onAddClick: () -> Unit) {
     Text(tr(language, "profile_settings"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     Text(tr(language, "profile_sub"), style = MaterialTheme.typography.bodyMedium)
+    Spacer(Modifier.height(8.dp))
+    Card(colors = CardDefaults.cardColors(containerColor = Orange), onClick = onAddClick) {
+        Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(tr(language, "opinion"), fontWeight = FontWeight.SemiBold)
+                Text(tr(language, "suggestion") + " · " + tr(language, "note"), style = MaterialTheme.typography.bodySmall)
+            }
+            Text("›", color = DeepOrange)
+        }
+    }
     Spacer(Modifier.height(8.dp))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
         item {
