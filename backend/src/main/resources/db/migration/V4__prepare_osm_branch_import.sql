@@ -4,8 +4,7 @@ ALTER TABLE store_branches
     ADD COLUMN last_seen_at TIMESTAMPTZ;
 
 CREATE UNIQUE INDEX uq_store_branches_source_id
-    ON store_branches(source, source_id)
-    WHERE source_id IS NOT NULL;
+    ON store_branches(source, source_id);
 
 INSERT INTO catalog_retailers(code, name, category_code, website_url) VALUES
 ('lukoil', 'LUKOIL', 'fuel', 'https://lukoil.bg/'),
