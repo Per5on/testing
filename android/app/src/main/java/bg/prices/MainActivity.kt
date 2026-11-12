@@ -295,7 +295,7 @@ private fun BgPricesApp() {
 
     LaunchedEffect(locationLabel, locationCoordinates, radius, language) {
         val baseUrl = BuildConfig.API_BASE_URL.trim()
-        if (baseUrl.isBlank()) {
+        if (catalogApi == null || baseUrl.isBlank()) {
             categories.indices.forEach { index -> categories[index] = categories[index].copy(retailers = emptyList()) }
             catalogMessage = tr(language, "catalog_config_missing")
         } else {
@@ -347,7 +347,7 @@ private fun BgPricesApp() {
                 ).forEach { (item, key) ->
                     NavigationBarItem(
                         selected = destination == item,
-                        onClick = { if (item == Destination.ADD) showAddDialog = true else destination = item },
+                        onClick = { if (item == Destination.ADD) { addStatus = ""; showAddDialog = true } else destination = item },
                         icon = { Text(when (item) { Destination.CATEGORIES -> "▦"; Destination.PRICING -> "€"; Destination.ADD -> "+"; Destination.BASKET -> "🛒"; Destination.PROFILE -> "●" }, fontWeight = FontWeight.Bold) },
                         label = { Text(tr(language, key)) }
                     )
@@ -430,6 +430,7 @@ private fun BgPricesApp() {
                     }
                     OutlinedTextField(value = addText, onValueChange = { addText = it }, label = { Text(tr(language, "describe") + tr(language, addType)) }, minLines = 3)
                     Text(tr(language, "review_note"), style = MaterialTheme.typography.bodySmall)
+                    if (addStatus.isNotBlank()) Text(addStatus, color = if (addStatus == tr(language, "add_sent")) DeepLeaf else MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = { Button(onClick = {
