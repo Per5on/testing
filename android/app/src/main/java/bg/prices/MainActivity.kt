@@ -86,7 +86,7 @@ private val translations = mapOf(
         "moderation" to "Опашка за модерация", "app_settings" to "Настройки на приложението",
         "category_order" to "Подредба на категориите", "location_settings" to "Настройки на местоположението",
         "add_title" to "Добави в BG Prices", "suggestion" to "Предложение", "note" to "Бележка",
-        "opinion" to "Мнение", "describe" to "Опиши: ", "review_note" to "Предложенията ще бъдат прегледани преди да се добавят в каталога.",
+        "opinion" to "Мнение", "online_bulgaria" to "Онлайн · България", "describe" to "Опиши: ", "review_note" to "Предложенията ще бъдат прегледани преди да се добавят в каталога.",
         "submit" to "Изпрати", "cancel" to "Отказ", "location_filter" to "Филтър по местоположение",
         "city_town" to "Населено място (град, село и др.)", "coordinates" to "Координати", "current_location" to "Използвай текущото местоположение",
         "city_placeholder" to "Напр. Велико Търново, Арбанаси, Килифарево", "coordinates_placeholder" to "Ширина, дължина (напр. 43.0757, 25.6172)",
@@ -142,7 +142,7 @@ private val translations = mapOf(
         "moderation" to "Moderation queue", "app_settings" to "App settings",
         "category_order" to "Category display order", "location_settings" to "Location settings",
         "add_title" to "Add to BG Prices", "suggestion" to "Suggestion", "note" to "Note",
-        "opinion" to "Opinion", "describe" to "Describe: ", "review_note" to "Submissions will be reviewed before appearing in the catalogue.",
+        "opinion" to "Opinion", "online_bulgaria" to "Online · Bulgaria", "describe" to "Describe: ", "review_note" to "Submissions will be reviewed before appearing in the catalogue.",
         "submit" to "Submit", "cancel" to "Cancel", "location_filter" to "Location filter",
         "city_town" to "Inhabited place (city, town, village, etc.)", "coordinates" to "Coordinates", "current_location" to "Use current location",
         "city_placeholder" to "e.g. Veliko Tarnovo, Arbanasi, Kilifarevo", "coordinates_placeholder" to "Latitude, longitude (e.g. 43.0757, 25.6172)",
@@ -220,7 +220,7 @@ private data class PriceCatalogItemDto(
     val retailerCode: String,
     val retailerName: String,
     val branchName: String? = null,
-    val city: String,
+    val city: String? = null,
     val settlement: String? = null,
     val address: String? = null,
     val priceEur: Double,
@@ -229,6 +229,7 @@ private data class PriceCatalogItemDto(
     val source: String,
     val sourceReference: String? = null,
     val priceNote: String? = null,
+    val priceScope: String = "BRANCH",
     val verified: Boolean,
     val collectedAt: String,
     val validUntil: String? = null
@@ -656,8 +657,12 @@ private fun PricingContent(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            item.retailerName + " · " + (item.branchName?.takeIf { it.isNotBlank() }
-                                ?: item.settlement?.takeIf { it.isNotBlank() } ?: item.city),
+                            if (item.priceScope == "NATIONAL_ONLINE") {
+                                item.retailerName + " · " + tr(language, "online_bulgaria")
+                            } else {
+                                item.retailerName + " · " + (item.branchName?.takeIf { it.isNotBlank() }
+                                    ?: item.settlement?.takeIf { it.isNotBlank() } ?: item.city.orEmpty())
+                            },
                             color = DeepOrange,
                             style = MaterialTheme.typography.bodySmall
                         )
