@@ -132,7 +132,14 @@ class OpenStreetMapImportJob(
             }
             log.info("OpenStreetMap import complete: {} populated places, {} matched retailer branches in {} ms", localitiesImported, branchesImported, (System.nanoTime() - startedAt) / 1_000_000)
         } catch (exception: Exception) {
-            log.warn("OpenStreetMap import failed after {} ms; existing catalogue data is retained: {}", (System.nanoTime() - startedAt) / 1_000_000, exception.message)
+            log.error(
+                "OpenStreetMap import failed after {} ms; existing catalogue data is retained",
+                (System.nanoTime() - startedAt) / 1_000_000,
+                exception
+            )
+            // A scheduled/container job must exit unsuccessfully so the scheduler can retry
+            // and monitoring does not report a failed import as a successful run.
+            throw exception
         }
     }
 
