@@ -6,6 +6,10 @@ on:
       - 'preview/**'
   workflow_dispatch:
 
+concurrency:
+  group: bg-prices-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
