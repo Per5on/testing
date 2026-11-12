@@ -12,3 +12,8 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+
+catalog:
+  osm:
+    initial-delay-ms: ${OSM_INITIAL_DELAY_MS:60000}
+    refresh-ms: ${OSM_REFRESH_MS:43200000}
