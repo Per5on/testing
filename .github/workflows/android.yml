@@ -16,6 +16,7 @@ jobs:
     env:
       APP_VERSION_CODE: ${{ github.run_number }}
       APP_VERSION_NAME: 0.1.${{ github.run_number }}
+      BG_PRICES_API_BASE_URL: ${{ vars.BG_PRICES_API_BASE_URL }}
     steps:
       - name: Check out source
         uses: actions/checkout@v5
@@ -40,7 +41,8 @@ jobs:
         run: |
           gradle -p android assembleDebug --stacktrace \
             -PAPP_VERSION_CODE="$APP_VERSION_CODE" \
-            -PAPP_VERSION_NAME="$APP_VERSION_NAME"
+            -PAPP_VERSION_NAME="$APP_VERSION_NAME" \\
+            -PBG_PRICES_API_BASE_URL="$BG_PRICES_API_BASE_URL"
           mkdir -p artifacts
           APK_NAME="BG-Prices-v${APP_VERSION_NAME}-build${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}.apk"
           cp android/app/build/outputs/apk/debug/app-debug.apk "artifacts/$APK_NAME"
