@@ -232,7 +232,7 @@ private fun BgPricesApp() {
             }
             Spacer(Modifier.height(10.dp))
             OutlinedButton(onClick = { showLocationDialog = true }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)) {
-                Icon(IconsLocation, contentDescription = null)
+                Text("📍")
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
                     Text(locationLabel.ifBlank { tr(language, "choose_location") }, fontWeight = FontWeight.SemiBold, maxLines = 1)
@@ -296,10 +296,6 @@ private fun BgPricesApp() {
         )
     }
 }
-
-@Composable
-private val IconsLocation: androidx.compose.ui.graphics.vector.ImageVector
-    get() = androidx.compose.material.icons.Icons.Outlined.Place
 
 @Composable
 private fun CategoryRibbon(categories: List<PriceCategory>, selected: Int, language: String, onSelect: (Int) -> Unit, onMove: (Int, Int) -> Unit) {
@@ -367,7 +363,7 @@ private fun PricingContent(category: PriceCategory, selectedRetailer: String?, l
     }
     Spacer(Modifier.height(8.dp))
     Text(tr(language, "store_overview"), style = MaterialTheme.typography.labelLarge, color = DeepLeaf, fontWeight = FontWeight.Bold)
-    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(category.retailers.filter { selectedRetailer == null || it == selectedRetailer }) { retailer ->
             Card(colors = CardDefaults.cardColors(containerColor = Leaf)) {
                 Column(Modifier.fillMaxWidth().padding(12.dp)) {
@@ -516,5 +512,3 @@ private fun InfoCard(title: String, description: String) {
     }
 }
 
-private val androidx.compose.material.icons.IconsLocation: androidx.compose.ui.graphics.vector.ImageVector
-    get() = androidx.compose.material.icons.Icons.Outlined.Place
