@@ -40,7 +40,7 @@ jobs:
           done
           grep -q '"status":"UP"' /tmp/bg-prices-health.json
           docker compose exec -T db psql -U bgprices -d bgprices -v ON_ERROR_STOP=1 < backend/src/main/resources/db/demo/sample_offers_bg_2026-11-12.sql
-          curl --fail --silent 'http://localhost:8080/api/v1/prices/catalog?categoryCode=groceries' | jq -e 'length >= 10 and all(.[]; .priceScope == "NATIONAL_ONLINE" and .currency == "EUR" and .verified == true)'
-          curl --fail --silent 'http://localhost:8080/api/v1/catalog' | jq -e '[.categories[] | select(.code == "groceries") | .retailers[] | select(.code == "lidl")] | length == 1'
+          curl --fail --silent 'http://localhost:8080/api/v1/prices/catalog?limit=100' | jq -e 'length == 9 and all(.[]; .priceScope == "NATIONAL_ONLINE" and .currency == "EUR" and .verified == true)'
+          curl --fail --silent 'http://localhost:8080/api/v1/catalog' | jq -e '[.categories[].retailers[].code] | sort == ["ardes", "ikea", "praktiker"]'
           curl --fail --silent 'http://localhost:8080/api/v1/catalog?locality=Veliko%20Tarnovo' | jq -e '.categories | length == 4'
           curl --fail --silent 'http://localhost:8080/api/v1/localities?query=Ve' | jq -e 'type == "array"'
