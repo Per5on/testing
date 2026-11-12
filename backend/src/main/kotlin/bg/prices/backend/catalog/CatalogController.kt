@@ -56,8 +56,24 @@ class CatalogController(private val jdbc: JdbcTemplate) {
         val args = mutableListOf<Any>(categoryCode)
         if (locality != null) {
             locationClause = """
-                AND (LOWER(b.city) = LOWER(?) OR LOWER(COALESCE(b.settlement, '')) = LOWER(?))
+                AND (
+                  LOWER(b.city) = LOWER(?)
+                  OR LOWER(COALESCE(b.settlement, '')) = LOWER(?)
+                  OR EXISTS (
+                    SELECT 1
+                    FROM inhabited_localities l
+                    WHERE (LOWER(l.name) = LOWER(?) OR LOWER(COALESCE(l.name_bg, '')) = LOWER(?))
+                      AND (
+                        LOWER(b.city) = LOWER(l.name)
+                        OR LOWER(COALESCE(b.settlement, '')) = LOWER(l.name)
+                        OR (l.name_bg IS NOT NULL AND LOWER(b.city) = LOWER(l.name_bg))
+                        OR (l.name_bg IS NOT NULL AND LOWER(COALESCE(b.settlement, '')) = LOWER(l.name_bg))
+                      )
+                  )
+                )
             """.trimIndent()
+            args += locality
+            args += locality
             args += locality
             args += locality
         } else if (latitude != null && longitude != null) {
