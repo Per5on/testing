@@ -205,7 +205,8 @@ private fun BgPricesApp() {
     var locationLabel by remember { mutableStateOf(prefs.getString("location_label", "") ?: "") }
     var locationCoordinates by remember { mutableStateOf(prefs.getString("location_coordinates", "") ?: "") }
     var radius by remember { mutableStateOf(prefs.getInt("location_radius", 10)) }
-    val categories = remember { mutableStateListOf<PriceCategory>().apply { addAll(defaultCategories.map { it.copy(retailers = emptyList()) }) } }\n    var catalogMessage by remember { mutableStateOf("") }
+    val categories = remember { mutableStateListOf<PriceCategory>().apply { addAll(defaultCategories.map { it.copy(retailers = emptyList()) }) } }
+    var catalogMessage by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableIntStateOf(0) }
     var destination by remember { mutableStateOf(Destination.CATEGORIES) }
     var selectedRetailer by remember { mutableStateOf<String?>(null) }
