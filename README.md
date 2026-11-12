@@ -11,7 +11,7 @@ Native Android app prototype for comparing prices in Bulgaria.
 
 ## Build
 GitHub Actions builds the debug APK on pushes to `main` and on pull requests.
-Open the repository's **Actions** tab, select **Android debug build**, then download the `bg-prices-debug-apk` artifact from a successful run.
+Open the repository's **Actions** tab, select **Android debug build**, then download the versioned `bg-prices-v…` artifact from the successful run. Each workflow run receives a unique artifact name, a monotonically increasing Android `versionCode`, and a version name in the `0.1.<build number>` format. Previous artifacts are not overwritten or cancelled by newer pushes; artifacts are retained for 90 days. The APK filename includes its app version, build number, and commit.
 
 ## Run locally
 Open the `android` folder in Android Studio (JDK 17, Android SDK 35), sync Gradle, then run the app on an emulator or Android device.
