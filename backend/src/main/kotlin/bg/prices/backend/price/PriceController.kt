@@ -197,12 +197,13 @@ data class PriceResponse(
     val branchName: String?,
     val city: String?,
     val settlement: String?,
-    val address: String,
+    val address: String?,
     val priceEur: BigDecimal,
     val regularPriceEur: BigDecimal?,
     val currency: String,
     val source: String,
     val verified: Boolean,
+    val priceScope: String,
     val collectedAt: String,
     val validUntil: String?
 )
@@ -218,7 +219,7 @@ data class PriceCatalogResponse(
     val retailerCode: String,
     val retailerName: String,
     val branchName: String?,
-    val city: String,
+    val city: String?,
     val settlement: String?,
     val address: String?,
     val priceEur: BigDecimal,
