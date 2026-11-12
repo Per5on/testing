@@ -70,7 +70,7 @@ class OpenStreetMapImportJob(
                 area["ISO3166-1"="BG"][admin_level=2]->.bg;
                 (
                   nwr["place"~"^(city|town|village|hamlet|isolated_dwelling|suburb|neighbourhood|quarter)$"](area.bg);
-                  nwr["shop"~"^(supermarket|convenience|electronics|computer|furniture|doityourself)$"](area.bg);
+                  nwr["shop"~"^(supermarket|convenience|electronics|computer|appliance|furniture|homeware|hardware|doityourself|department_store)$"](area.bg);
                   nwr["amenity"="fuel"](area.bg);
                 );
                 out center tags;
