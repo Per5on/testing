@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,10 +24,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
+import retrofit2.http.POST
+import retrofit2.http.Body
 import retrofit2.http.Query
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val Leaf = Color(0xFFE5F3E5)
 private val DeepLeaf = Color(0xFF356B43)
@@ -88,7 +95,11 @@ private val translations = mapOf(
         "choose_location_first" to "Избери населено място или текущо местоположение, за да видиш наличните магазини.",
         "catalog_error" to "Каталогът временно не е достъпен. Провери връзката и опитай отново.",
         "location_all" to "Всички локации", "nearby" to "Близо до мен",
-        "location_saved" to "Местоположението е запазено", "choose_location" to "Избор на местоположение"
+        "location_saved" to "Местоположението е запазено", "choose_location" to "Избор на местоположение",
+        "profile_preview_note" to "Профилите и личните данни не са налични в тази preview версия. Не се съхраняват данни за потребителски акаунти.",
+        "add_sent" to "Предложението е изпратено за преглед.", "add_error" to "Изпращането не беше успешно. Провери връзката и опитай отново.",
+        "basket_add" to "Добави продукт или артикул", "basket_item_placeholder" to "Име на продукт", "basket_empty" to "Списъкът е празен.",
+        "basket_local_note" to "Списъкът се пази локално на това устройство. Ценово сравнение ще има при потвърдени цени.", "remove" to "Премахни"
     ),
     "en" to mapOf(
         "tagline" to "Compare prices in EUR", "location" to "Location",
@@ -137,7 +148,11 @@ private val translations = mapOf(
         "choose_location_first" to "Choose an inhabited place or your current location to see available stores.",
         "catalog_error" to "The catalogue is temporarily unavailable. Check the connection and try again.",
         "location_all" to "All locations", "nearby" to "Near me",
-        "location_saved" to "Location saved", "choose_location" to "Choose location"
+        "location_saved" to "Location saved", "choose_location" to "Choose location",
+        "profile_preview_note" to "Accounts and personal profile data are not available in this preview. No user account profile data is stored.",
+        "add_sent" to "Your submission was sent for review.", "add_error" to "Submission failed. Check the connection and try again.",
+        "basket_add" to "Add a product or item", "basket_item_placeholder" to "Product name", "basket_empty" to "Your list is empty.",
+        "basket_local_note" to "This list is stored locally on this device. Price comparison requires verified prices.", "remove" to "Remove"
     )
 )
 
@@ -175,6 +190,9 @@ private data class CatalogCategoryDto(
     val retailers: List<CatalogRetailerDto> = emptyList()
 )
 private data class CatalogRetailerDto(val code: String, val name: String, val websiteUrl: String? = null)
+private data class LocalitySuggestionDto(val id: String, val name: String, val nameBg: String?, val type: String, val municipality: String?, val region: String?)
+private data class SubmissionRequestDto(val type: String, val content: String, val locationLabel: String?, val latitude: Double?, val longitude: Double?)
+private data class SubmissionAcceptedDto(val id: String, val status: String)
 
 private interface CatalogApi {
     @GET("api/v1/catalog")
@@ -184,6 +202,12 @@ private interface CatalogApi {
         @Query("longitude") longitude: Double? = null,
         @Query("radiusKm") radiusKm: Int = 10
     ): CatalogPayload
+
+    @GET("api/v1/localities")
+    suspend fun searchLocalities(@Query("query") query: String): List<LocalitySuggestionDto>
+
+    @POST("api/v1/submissions")
+    suspend fun submit(@Body request: SubmissionRequestDto): SubmissionAcceptedDto
 }
 
 private enum class Destination { CATEGORIES, PRICING, ADD, BASKET, PROFILE }
@@ -203,6 +227,24 @@ class MainActivity : ComponentActivity() {
 private fun BgPricesApp() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { context.getSharedPreferences("bg_prices_settings", Context.MODE_PRIVATE) }
+    val database = remember { BgPricesDatabase.get(context) }
+    val scope = rememberCoroutineScope()
+    var basketItems by remember { mutableStateOf(emptyList<BasketItemEntity>()) }
+    LaunchedEffect(database) { database.basketDao().observeAll().collect { basketItems = it } }
+    val catalogApi = remember(BuildConfig.API_BASE_URL) {
+        val base = BuildConfig.API_BASE_URL.trim()
+        if (base.isBlank()) null else runCatching {
+            Retrofit.Builder()
+                .baseUrl(if (base.endsWith("/")) base else "$base/")
+                .client(OkHttpClient.Builder()
+                    .connectTimeout(5, TimeUnit.SECONDS)
+                    .readTimeout(15, TimeUnit.SECONDS)
+                    .callTimeout(20, TimeUnit.SECONDS)
+                    .build())
+                .addConverterFactory(GsonConverterFactory.create())
+                .build().create(CatalogApi::class.java)
+        }.getOrNull()
+    }
     var language by remember { mutableStateOf(prefs.getString("language", "bg") ?: "bg") }
     var locationLabel by remember { mutableStateOf(prefs.getString("location_label", "") ?: "") }
     var locationCoordinates by remember { mutableStateOf(prefs.getString("location_coordinates", "") ?: "") }
@@ -217,6 +259,7 @@ private fun BgPricesApp() {
     var showAddDialog by remember { mutableStateOf(false) }
     var addType by remember { mutableStateOf("suggestion") }
     var addText by remember { mutableStateOf("") }
+    var addStatus by remember { mutableStateOf("") }
 
     LaunchedEffect(language, locationLabel, locationCoordinates, radius, profileView) {
         prefs.edit()
@@ -257,16 +300,11 @@ private fun BgPricesApp() {
             catalogMessage = tr(language, "catalog_config_missing")
         } else {
             try {
-                val api = Retrofit.Builder()
-                    .baseUrl(if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/")
-                    .addConverterFactory(GsonConverterFactory.create())
-                    .build()
-                    .create(CatalogApi::class.java)
                 val coords = locationCoordinates.split(",").mapNotNull { it.trim().toDoubleOrNull() }
                 val hasCoordinates = coords.size == 2
                 val ignoredLabels = listOf(tr(language, "nearby"), tr(language, "permission_denied"), tr(language, "location_unavailable"))
                 val locality = locationLabel.takeIf { it.isNotBlank() && it !in ignoredLabels && !hasCoordinates }
-                val response = api.getCatalog(
+                val response = catalogApi.getCatalog(
                     locality = locality,
                     latitude = if (hasCoordinates) coords[0] else null,
                     longitude = if (hasCoordinates) coords[1] else null,
@@ -283,8 +321,10 @@ private fun BgPricesApp() {
                         descriptionEn = item.descriptionEn
                     )
                 }
+                val savedOrder = prefs.getString("category_order", "")?.split("|")?.filter { it.isNotBlank() }.orEmpty()
+                val ordered = loaded.sortedBy { item -> savedOrder.indexOf(item.key).let { if (it < 0) Int.MAX_VALUE else it } }
                 categories.clear()
-                categories.addAll(loaded)
+                categories.addAll(ordered)
                 if (selectedCategory !in categories.indices) selectedCategory = 0
                 if (selectedRetailer != null && categories.getOrNull(selectedCategory)?.retailers?.contains(selectedRetailer) != true) {
                     selectedRetailer = null
@@ -337,7 +377,10 @@ private fun BgPricesApp() {
             when (destination) {
                 Destination.CATEGORIES, Destination.PRICING -> {
                     CategoryRibbon(categories, selectedCategory, language, onSelect = { selectedCategory = it; selectedRetailer = null }, onMove = { from, to ->
-                        if (to in categories.indices) { val moved = categories.removeAt(from); categories.add(to, moved); selectedCategory = to }
+                        if (to in categories.indices) {
+                            val moved = categories.removeAt(from); categories.add(to, moved); selectedCategory = to
+                            prefs.edit().putString("category_order", categories.joinToString("|") { it.key }).apply()
+                        }
                     })
                     Spacer(Modifier.height(10.dp))
                     if (destination == Destination.CATEGORIES) {
@@ -346,7 +389,12 @@ private fun BgPricesApp() {
                         PricingContent(categories[selectedCategory], selectedRetailer, language, locationLabel)
                     }
                 }
-                Destination.BASKET -> BasketContent(categories[selectedCategory], selectedRetailer, language, locationLabel)
+                Destination.BASKET -> BasketContent(
+                    categories[selectedCategory], selectedRetailer, language, locationLabel, basketItems,
+                    onAdd = { name -> scope.launch { database.basketDao().insert(BasketItemEntity(name = name, categoryCode = categories[selectedCategory].key)) } },
+                    onQuantityChange = { id, delta -> scope.launch { database.basketDao().changeQuantity(id, delta) } },
+                    onRemove = { id -> scope.launch { database.basketDao().delete(id) } }
+                )
                 Destination.PROFILE -> ProfileContent(profileView, language, onViewChange = { profileView = it }, onLanguageChange = { language = it }, onLocationClick = { showLocationDialog = true })
                 Destination.ADD -> Unit
             }
@@ -356,7 +404,7 @@ private fun BgPricesApp() {
     if (showLocationDialog) {
         LocationDialog(
             language = language, initialLabel = locationLabel, initialCoordinates = locationCoordinates,
-            initialRadius = radius, onCurrentLocation = {
+            initialRadius = radius, api = catalogApi, onCurrentLocation = {
                 permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
             },
             onDismiss = { showLocationDialog = false },
@@ -384,7 +432,22 @@ private fun BgPricesApp() {
                     Text(tr(language, "review_note"), style = MaterialTheme.typography.bodySmall)
                 }
             },
-            confirmButton = { Button(onClick = { showAddDialog = false; addText = "" }, enabled = addText.isNotBlank()) { Text(tr(language, "submit")) } },
+            confirmButton = { Button(onClick = {
+                val api = catalogApi
+                if (api == null) addStatus = tr(language, "catalog_config_missing")
+                else scope.launch {
+                    try {
+                        val coords = locationCoordinates.split(",").mapNotNull { it.trim().toDoubleOrNull() }
+                        api.submit(SubmissionRequestDto(
+                            type = addType.uppercase(), content = addText.trim(),
+                            locationLabel = locationLabel.takeIf { it.isNotBlank() },
+                            latitude = coords.getOrNull(0), longitude = coords.getOrNull(1)
+                        ))
+                        addStatus = tr(language, "add_sent")
+                        addText = ""
+                    } catch (_: Exception) { addStatus = tr(language, "add_error") }
+                }
+            }, enabled = addText.isNotBlank()) { Text(tr(language, "submit")) } },
             dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text(tr(language, "cancel")) } }
         )
     }
@@ -480,7 +543,17 @@ private fun PricingContent(category: PriceCategory, selectedRetailer: String?, l
 }
 
 @Composable
-private fun BasketContent(category: PriceCategory, selectedRetailer: String?, language: String, location: String) {
+private fun BasketContent(
+    category: PriceCategory,
+    selectedRetailer: String?,
+    language: String,
+    location: String,
+    basketItems: List<BasketItemEntity>,
+    onAdd: (String) -> Unit,
+    onQuantityChange: (Long, Int) -> Unit,
+    onRemove: (Long) -> Unit
+) {
+    var newItem by remember { mutableStateOf("") }
     Text(tr(language, "basket"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     Text(tr(language, "basket_sub"), style = MaterialTheme.typography.bodyMedium)
     Text(tr(language, "location") + ": " + location.ifBlank { tr(language, "all_locations") }, style = MaterialTheme.typography.labelSmall, color = DeepOrange)
@@ -492,24 +565,40 @@ private fun BasketContent(category: PriceCategory, selectedRetailer: String?, la
         }
     }
     Spacer(Modifier.height(8.dp))
-    Text(tr(language, "prices_by_store"), style = MaterialTheme.typography.labelLarge, color = DeepLeaf, fontWeight = FontWeight.Bold)
-    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 150.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        items(category.retailers.filter { selectedRetailer == null || it == selectedRetailer }) { retailer ->
+    Text(tr(language, "lists"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = newItem, onValueChange = { newItem = it.take(160) },
+            modifier = Modifier.weight(1f), singleLine = true,
+            label = { Text(tr(language, "basket_item_placeholder")) }
+        )
+        Button(onClick = { onAdd(newItem.trim()); newItem = "" }, enabled = newItem.isNotBlank()) { Text("+") }
+    }
+    if (basketItems.isEmpty()) Text(tr(language, "basket_empty"), style = MaterialTheme.typography.bodySmall)
+    else LazyColumn(Modifier.fillMaxWidth().heightIn(max = 230.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        items(basketItems, key = { it.id }) { item ->
             Card(colors = CardDefaults.cardColors(containerColor = Leaf)) {
-                Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(retailer, fontWeight = FontWeight.SemiBold)
-                    Text(tr(language, "pending") + " · EUR", color = DeepOrange, style = MaterialTheme.typography.labelSmall)
+                Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(item.name, fontWeight = FontWeight.SemiBold)
+                        Text(item.quantity.toString() + " ×", style = MaterialTheme.typography.labelSmall, color = DeepOrange)
+                    }
+                    TextButton(onClick = { onQuantityChange(item.id, -1) }) { Text("−") }
+                    Text(item.quantity.toString())
+                    TextButton(onClick = { onQuantityChange(item.id, 1) }) { Text("+") }
+                    TextButton(onClick = { onRemove(item.id) }) { Text("×", color = MaterialTheme.colorScheme.error) }
                 }
             }
         }
     }
-    InfoCard(tr(language, "lists"), tr(language, "lists_desc"))
+    Text(tr(language, "basket_local_note"), style = MaterialTheme.typography.labelSmall, color = DeepOrange)
+    Spacer(Modifier.height(8.dp))
+    Text(tr(language, "prices_by_store"), style = MaterialTheme.typography.labelLarge, color = DeepLeaf, fontWeight = FontWeight.Bold)
+    Text(tr(language, "no_live"), style = MaterialTheme.typography.bodySmall)
     InfoCard(tr(language, "single_basket"), tr(language, "single_desc"))
     InfoCard(tr(language, "combined_basket"), tr(language, "combined_desc"))
     InfoCard(tr(language, "savings"), tr(language, "savings_desc"))
-    Text(tr(language, "demo_basket"), style = MaterialTheme.typography.labelSmall, color = DeepOrange)
 }
-
 @Composable
 private fun ProfileContent(view: String, language: String, onViewChange: (String) -> Unit, onLanguageChange: (String) -> Unit, onLocationClick: () -> Unit) {
     Text(tr(language, "profile_settings"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -546,19 +635,28 @@ private fun ProfileContent(view: String, language: String, onViewChange: (String
                 }
             }
         }
+        item { Text(tr(language, "profile_preview_note"), color = DeepOrange, style = MaterialTheme.typography.bodySmall) }
         items(listOf("account", "submissions", "moderation", "app_settings", "category_order")) { key ->
-            InfoCard(tr(language, key), "")
+            InfoCard(tr(language, key), if (key == "account" || key == "submissions" || key == "moderation") tr(language, "profile_preview_note") else "")
         }
     }
 }
 
 @Composable
-private fun LocationDialog(language: String, initialLabel: String, initialCoordinates: String, initialRadius: Int, onCurrentLocation: () -> Unit, onDismiss: () -> Unit, onSave: (String, String, Int) -> Unit) {
+private fun LocationDialog(language: String, initialLabel: String, initialCoordinates: String, initialRadius: Int, api: CatalogApi?, onCurrentLocation: () -> Unit, onDismiss: () -> Unit, onSave: (String, String, Int) -> Unit) {
     var mode by remember { mutableStateOf(if (initialCoordinates.isNotBlank()) "coordinates" else "city") }
     var city by remember { mutableStateOf(if (initialLabel == tr(language, "nearby")) "" else initialLabel) }
     var coordinates by remember { mutableStateOf(initialCoordinates) }
     var radius by remember { mutableIntStateOf(initialRadius) }
     var error by remember { mutableStateOf("") }
+    var suggestions by remember { mutableStateOf<List<LocalitySuggestionDto>>(emptyList()) }
+    LaunchedEffect(city, mode, api) {
+        if (mode != "city" || api == null || city.trim().length < 2) { suggestions = emptyList() }
+        else {
+            delay(350)
+            suggestions = runCatching { api.searchLocalities(city.trim()) }.getOrDefault(emptyList())
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -571,6 +669,16 @@ private fun LocationDialog(language: String, initialLabel: String, initialCoordi
                 }
                 if (mode == "city") {
                     OutlinedTextField(value = city, onValueChange = { city = it; error = "" }, label = { Text(tr(language, "city_town")) }, placeholder = { Text(tr(language, "city_placeholder")) }, singleLine = true)
+                    if (suggestions.isNotEmpty()) {
+                        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 150.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            items(suggestions) { item ->
+                                Column(Modifier.fillMaxWidth().clickable { city = item.nameBg?.takeIf { language == "bg" && it.isNotBlank() } ?: item.name; suggestions = emptyList() }.padding(8.dp)) {
+                                    Text(item.nameBg?.takeIf { language == "bg" && it.isNotBlank() } ?: item.name, fontWeight = FontWeight.SemiBold)
+                                    Text(listOf(item.type.lowercase(), item.municipality, item.region).filterNotNull().joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = DeepOrange)
+                                }
+                            }
+                        }
+                    }
                 } else {
                     OutlinedTextField(value = coordinates, onValueChange = { coordinates = it; error = "" }, label = { Text(tr(language, "coordinates")) }, placeholder = { Text(tr(language, "coordinates_placeholder")) }, singleLine = true)
                 }
