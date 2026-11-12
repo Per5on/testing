@@ -33,7 +33,7 @@ Native Android preview application for comparing prices in Bulgaria.
 - `POST /api/v1/submissions` accepts suggestion, note and opinion submissions for moderation.
 - `GET /actuator/health` exposes health status without detailed infrastructure information.
 
-The products and price-observation schema supports branch prices and nationwide online prices. The preview seed is in `backend/src/main/resources/db/demo/sample_offers_bg_2026-11-12.sql` (25 product/offer examples from Lidl, Ardes, Technopolis, IKEA and Praktiker). Every row retains its official retailer source URL, EUR price, collection timestamp, validity window and an explicit note that branch stock is not confirmed. Sample prices expire quickly; they are for preview demonstration only and must not be treated as a live feed. Missing prices are not treated as zero.
+The products and price-observation schema supports branch prices and nationwide online prices. The preview seed is in `backend/src/main/resources/db/demo/sample_offers_bg_2026-11-12.sql` (9 product/offer examples from Ardes, IKEA and Praktiker). Every row retains its official retailer source URL, EUR price, collection timestamp, validity window and an explicit note that branch stock is not confirmed. Sample prices expire quickly; they are for preview demonstration only and must not be treated as a live feed. Missing prices are not treated as zero.
 
 Submissions are anonymous and stored with PENDING status. The preview does not expose moderation actions or account management endpoints. The API applies bounded in-memory request limits; production deployment still requires a trusted edge proxy, authentication/authorization for administrative workflows, and deployment-level monitoring.
 
@@ -79,7 +79,7 @@ The repository includes a local PostgreSQL + API setup. It starts with migrated 
    curl "http://localhost:8080/api/v1/catalog?locality=Veliko%20Tarnovo"
    ```
 
-The importer uses OpenStreetMap community data and retains OSM source IDs. Some branches will be absent where the map does not contain a reliable retailer match or a locality within 25 km. OSM is not a retailer price feed. The preview's national online offer samples come from the official retailer pages recorded in the SQL seed; they do not assert branch-level availability. Product photos are not yet implemented. OSM attribution is required in any public demo.
+The importer uses OpenStreetMap community data and retains OSM source IDs. Some branches will be absent where the map does not contain a reliable retailer match or a locality within 25 km. OSM is not a retailer price feed. The preview's national online offer samples come from the official Ardes, IKEA Bulgaria and Praktiker pages recorded in the SQL seed; they do not assert branch-level availability. Grocery and fuel prices remain empty until a current official price source is verified. Product photos are not yet implemented. OSM attribution is required in any public demo.
 
 The local Compose database is for development/demo use only. Do not expose its PostgreSQL port publicly or reuse the example password in a hosted environment. For the Android emulator, build with `-PBG_PRICES_API_BASE_URL=http://10.0.2.2:8080/`. For a physical Android device, use the development computer's reachable LAN address. The preview APK distributed to users must use the hosted HTTPS API URL, not localhost or a private LAN address.
 
