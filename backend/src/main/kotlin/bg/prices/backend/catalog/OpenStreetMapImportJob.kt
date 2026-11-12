@@ -13,7 +13,7 @@ import org.springframework.web.client.RestClient
 class OpenStreetMapImportJob(
     private val jdbc: JdbcTemplate,
     private val mapper: ObjectMapper,
-    @Value("${catalog.osm.overpass-url}") private val overpassUrl: String
+    @Value("\${catalog.osm.overpass-url}") private val overpassUrl: String
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val requestFactory = SimpleClientHttpRequestFactory().apply {
