@@ -412,7 +412,13 @@ private fun CategoryContent(category: PriceCategory, view: String, selectedRetai
     Text(category.title(language), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     Text(category.subtitle(language), style = MaterialTheme.typography.bodyMedium)
     Spacer(Modifier.height(10.dp))
-    if (view == "Grid") {
+if (category.retailers.isEmpty()) {
+        Card(colors = CardDefaults.cardColors(containerColor = Orange)) {
+            Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                Text(emptyMessage, color = DeepOrange)
+            }
+        }
+    } else if (view == "Grid") {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
             items(category.retailers.chunked(2)) { pair ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
