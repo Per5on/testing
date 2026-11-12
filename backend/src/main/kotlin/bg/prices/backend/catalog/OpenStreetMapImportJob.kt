@@ -99,7 +99,7 @@ class OpenStreetMapImportJob(
                 val tags = element.path("tags")
                 if (tags.isMissingNode || !tags.isObject) return@forEach
                 val place = tags.path("place").asText("")
-                val name = tags.path("name").asText("").trim()
+                val name = tags.path("name").asText("").trim().take(180)
                 val sourceId = sourceId(element)
                 val lat = coordinate(element, "lat")
                 val lon = coordinate(element, "lon")
@@ -125,29 +125,29 @@ class OpenStreetMapImportJob(
                     ?: return@forEach
                 val retailer = matchRetailer(candidate) ?: return@forEach
                 val nearest = nearestLocality(lat, lon)
-                val city = firstTag(tags, "addr:city", "addr:town", "addr:village", "addr:place")
-                    ?: nearest?.name
+                val city = (firstTag(tags, "addr:city", "addr:town", "addr:village", "addr:place")
+                    ?: nearest?.name)?.take(120)
                 if (city.isNullOrBlank()) {
                     branchesSkipped++
                     return@forEach
                 }
-                val settlement = firstTag(tags, "addr:place", "addr:village", "addr:town") ?: city
+                val settlement = (firstTag(tags, "addr:place", "addr:village", "addr:town") ?: city).take(160)
                 val street = firstTag(tags, "addr:street")
                 val houseNumber = firstTag(tags, "addr:housenumber")
                 val postcode = firstTag(tags, "addr:postcode")
-                val address = firstTag(tags, "addr:full")
-                    ?: listOfNotNull(street, houseNumber).joinToString(" ").ifBlank { city }
+                val address = (firstTag(tags, "addr:full")
+                    ?: listOfNotNull(street, houseNumber).joinToString(" ").ifBlank { city }).take(300)
                 val localityType = if (nearest != null && nearest.name.equals(city, ignoreCase = true)) nearest.type else "OTHER"
                 upsertBranch(
                     sourceId = sourceId(element),
                     retailer = retailer,
-                    branchName = tags.path("name").asText("").trim().ifBlank { retailer.name },
+                    branchName = tags.path("name").asText("").trim().ifBlank { retailer.name }.take(160),
                     city = city,
                     settlement = settlement,
                     localityType = localityType,
-                    municipality = firstTag(tags, "addr:municipality") ?: nearest?.municipality,
-                    region = firstTag(tags, "addr:province", "is_in:state") ?: nearest?.region,
-                    address = listOfNotNull(address, postcode?.takeIf { !address.contains(it) }).joinToString(", "),
+                    municipality = (firstTag(tags, "addr:municipality") ?: nearest?.municipality)?.take(120),
+                    region = (firstTag(tags, "addr:province", "is_in:state") ?: nearest?.region)?.take(120),
+                    address = listOfNotNull(address, postcode?.takeIf { !address.contains(it) }).joinToString(", ").take(300),
                     latitude = lat,
                     longitude = lon
                 )
@@ -238,8 +238,8 @@ class OpenStreetMapImportJob(
               municipality = EXCLUDED.municipality, region = EXCLUDED.region,
               latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, on_map = TRUE
             """.trimIndent(),
-            sourceId, name, tags.path("name:bg").asText(null), type,
-            firstTag(tags, "addr:municipality"), firstTag(tags, "addr:province", "is_in:state"),
+            sourceId, name, tags.path("name:bg").asText("").trim().takeIf { it.isNotBlank() }?.take(180), type,
+            firstTag(tags, "addr:municipality")?.take(160), firstTag(tags, "addr:province", "is_in:state")?.take(160),
             latitude, longitude
         )
     }
