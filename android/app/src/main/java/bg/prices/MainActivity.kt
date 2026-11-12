@@ -207,7 +207,7 @@ private fun BgPricesApp() {
     Scaffold(
         containerColor = Paper,
         bottomBar = {
-            NavigationBar(containerColor = Leaf) {
+            NavigationBar(containerColor = Color.White) {
                 listOf(
                     Destination.CATEGORIES to "categories", Destination.PRICING to "pricing",
                     Destination.ADD to "add", Destination.BASKET to "basket", Destination.PROFILE to "profile"
@@ -324,7 +324,7 @@ private fun CategoryContent(category: PriceCategory, view: String, selectedRetai
             items(category.retailers.chunked(2)) { pair ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     pair.forEach { retailer ->
-                        Card(Modifier.weight(1f), onClick = { onRetailerSelect(retailer) }, colors = CardDefaults.cardColors(containerColor = if (selectedRetailer == retailer) Orange else Leaf)) {
+                        Card(onClick = { onRetailerSelect(retailer) }, modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = if (selectedRetailer == retailer) Orange else Leaf)) {
                             Column(Modifier.padding(14.dp)) {
                                 Text(retailer, fontWeight = FontWeight.Medium)
                                 Text(if (selectedRetailer == retailer) tr(language, "selected") else tr(language, "view_prices"), color = DeepLeaf, style = MaterialTheme.typography.labelSmall)
@@ -338,7 +338,7 @@ private fun CategoryContent(category: PriceCategory, view: String, selectedRetai
     } else {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
             items(category.retailers.filter { selectedRetailer == null || it == selectedRetailer }) { retailer ->
-                Card(Modifier.fillMaxWidth(), onClick = { onRetailerSelect(retailer) }, colors = CardDefaults.cardColors(containerColor = if (selectedRetailer == retailer) Orange else Leaf)) {
+                Card(onClick = { onRetailerSelect(retailer) }, modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = if (selectedRetailer == retailer) Orange else Leaf)) {
                     Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(retailer, fontWeight = FontWeight.Medium)
                         Text(if (selectedRetailer == retailer) tr(language, "selected") else tr(language, "view_prices"), color = DeepLeaf)
