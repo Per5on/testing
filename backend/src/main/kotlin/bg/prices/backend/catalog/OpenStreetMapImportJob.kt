@@ -21,7 +21,7 @@ class OpenStreetMapImportJob(
     }
     private val client = RestClient.builder()
         .requestFactory(requestFactory)
-        .defaultHeader("User-Agent", "BGPrices/0.1-preview (OpenStreetMap location catalogue; contact: support@bgprices.app)")
+        .defaultHeader("User-Agent", "BGPrices/0.1-preview (https://github.com/Per5on/testing)")
         .build()
 
     private val retailers = listOf(
