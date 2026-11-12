@@ -15,25 +15,25 @@ class PriceController(private val jdbc: JdbcTemplate) {
     @GetMapping("/latest")
     fun latest(@RequestParam productId: UUID): List<PriceResponse> = jdbc.query(
         """
-        SELECT DISTINCT ON (p.branch_id)
-            p.id, p.product_id, p.branch_id, b.retailer_name, b.branch_name,
+        SELECT DISTINCT ON (COALESCE(p.branch_id::text, 'ONLINE:' || p.retailer_code))
+            p.id, p.product_id, p.branch_id, COALESCE(b.retailer_name, p.retailer_name) AS retailer_name, b.branch_name,
             b.city, b.settlement, b.address, p.price_eur, p.regular_price_eur,
-            p.currency, p.source, p.verified, p.collected_at, p.valid_until
+            p.currency, p.source, p.verified, p.price_scope, p.collected_at, p.valid_until
         FROM price_observations p
-        JOIN store_branches b ON b.id = p.branch_id
+        LEFT JOIN store_branches b ON b.id = p.branch_id
         WHERE p.product_id = ?
           AND p.verified = TRUE
           AND (p.valid_from IS NULL OR p.valid_from <= NOW())
           AND (p.valid_until IS NULL OR p.valid_until > NOW())
-          AND b.active = TRUE
-        ORDER BY p.branch_id, p.collected_at DESC
+          AND (p.price_scope = 'NATIONAL_ONLINE' OR b.active = TRUE)
+        ORDER BY COALESCE(p.branch_id::text, 'ONLINE:' || p.retailer_code), p.collected_at DESC
         LIMIT 100
         """.trimIndent(),
         { rs, _ ->
             PriceResponse(
                 id = rs.getObject("id", UUID::class.java).toString(),
                 productId = rs.getObject("product_id", UUID::class.java).toString(),
-                branchId = rs.getObject("branch_id", UUID::class.java).toString(),
+                branchId = rs.getObject("branch_id", UUID::class.java)?.toString(),
                 retailerName = rs.getString("retailer_name"),
                 branchName = rs.getString("branch_name"),
                 city = rs.getString("city"),
@@ -44,6 +44,7 @@ class PriceController(private val jdbc: JdbcTemplate) {
                 currency = rs.getString("currency"),
                 source = rs.getString("source"),
                 verified = rs.getBoolean("verified"),
+                priceScope = rs.getString("price_scope"),
                 collectedAt = rs.getTimestamp("collected_at").toInstant().toString(),
                 validUntil = rs.getTimestamp("valid_until")?.toInstant()?.toString()
             )
@@ -72,7 +73,7 @@ class PriceController(private val jdbc: JdbcTemplate) {
 
         val filters = mutableListOf(
             "p.active = TRUE",
-            "b.active = TRUE",
+            "(po.price_scope = 'NATIONAL_ONLINE' OR b.active = TRUE)",
             "po.verified = TRUE",
             "(po.valid_from IS NULL OR po.valid_from <= NOW())",
             "(po.valid_until IS NULL OR po.valid_until > NOW())"
@@ -83,18 +84,20 @@ class PriceController(private val jdbc: JdbcTemplate) {
             args += categoryCode
         }
         if (!locality.isNullOrBlank() && latitude == null) {
-            filters += "(LOWER(b.city) = LOWER(?) OR LOWER(COALESCE(b.settlement, '')) = LOWER(?))"
+            filters += "(po.price_scope = 'NATIONAL_ONLINE' OR LOWER(b.city) = LOWER(?) OR LOWER(COALESCE(b.settlement, '')) = LOWER(?))"
             args += locality.trim()
             args += locality.trim()
         }
         if (latitude != null && longitude != null) {
             filters += """
+                (po.price_scope = 'NATIONAL_ONLINE' OR (
                 b.latitude IS NOT NULL AND b.longitude IS NOT NULL AND
                 (6371.0088 * 2 * ASIN(SQRT(
                     POWER(SIN(RADIANS(b.latitude - ?) / 2), 2) +
                     COS(RADIANS(?)) * COS(RADIANS(b.latitude)) *
                     POWER(SIN(RADIANS(b.longitude - ?) / 2), 2)
                 ))) <= ?
+                ))
             """.trimIndent()
             args += latitude
             args += latitude
@@ -102,24 +105,26 @@ class PriceController(private val jdbc: JdbcTemplate) {
             args += radiusKm.toDouble()
         }
         if (!retailerName.isNullOrBlank()) {
-            filters += "LOWER(b.retailer_name) = LOWER(?)"
+            filters += "LOWER(COALESCE(b.retailer_name, po.retailer_name)) = LOWER(?)"
             args += retailerName.trim()
         }
         args += limit
 
         val sql = """
             SELECT * FROM (
-                SELECT DISTINCT ON (p.id, b.id)
+                SELECT DISTINCT ON (p.id, COALESCE(b.id::text, 'ONLINE:' || po.retailer_code))
                     p.id AS product_id, p.category_code, p.name AS product_name, p.brand,
                     p.variant, p.package_quantity, p.package_unit,
-                    b.retailer_code, b.retailer_name, b.branch_name, b.city, b.settlement, b.address,
+                    COALESCE(po.retailer_code, b.retailer_code) AS retailer_code,
+                    COALESCE(po.retailer_name, b.retailer_name) AS retailer_name,
+                    b.branch_name, b.city, b.settlement, b.address,
                     po.price_eur, po.regular_price_eur, po.currency, po.source, po.source_reference,
-                    po.price_note, po.verified, po.collected_at, po.valid_until
+                    po.price_note, po.price_scope, po.verified, po.collected_at, po.valid_until
                 FROM price_observations po
                 JOIN products p ON p.id = po.product_id
-                JOIN store_branches b ON b.id = po.branch_id
+                LEFT JOIN store_branches b ON b.id = po.branch_id
                 WHERE ${filters.joinToString(" AND ")}
-                ORDER BY p.id, b.id, po.collected_at DESC
+                ORDER BY p.id, COALESCE(b.id::text, 'ONLINE:' || po.retailer_code), po.collected_at DESC
             ) latest
             ORDER BY product_name, price_eur ASC, retailer_name, city
             LIMIT ?
@@ -146,6 +151,7 @@ class PriceController(private val jdbc: JdbcTemplate) {
                 source = rs.getString("source"),
                 sourceReference = rs.getString("source_reference"),
                 priceNote = rs.getString("price_note"),
+                priceScope = rs.getString("price_scope"),
                 verified = rs.getBoolean("verified"),
                 collectedAt = rs.getTimestamp("collected_at").toInstant().toString(),
                 validUntil = rs.getTimestamp("valid_until")?.toInstant()?.toString()
@@ -186,10 +192,10 @@ class PriceController(private val jdbc: JdbcTemplate) {
 data class PriceResponse(
     val id: String,
     val productId: String,
-    val branchId: String,
+    val branchId: String?,
     val retailerName: String,
     val branchName: String?,
-    val city: String,
+    val city: String?,
     val settlement: String?,
     val address: String,
     val priceEur: BigDecimal,
@@ -221,6 +227,7 @@ data class PriceCatalogResponse(
     val source: String,
     val sourceReference: String?,
     val priceNote: String?,
+    val priceScope: String,
     val verified: Boolean,
     val collectedAt: String,
     val validUntil: String?
