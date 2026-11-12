@@ -18,7 +18,7 @@ android {
         // GitHub Actions supplies a monotonically increasing build number.
         // Local Android Studio builds keep the defaults below.
         versionCode = providers.gradleProperty("APP_VERSION_CODE").orElse("1").get().toInt()
-        versionName = providers.gradleProperty("APP_VERSION_NAME").orElse("0.1.0").get()
+        versionName = providers.gradleProperty("APP_VERSION_NAME").orElse("0.1.0.preview").get()
     }
 
     buildFeatures {
