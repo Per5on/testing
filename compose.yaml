@@ -1,0 +1,54 @@
+name: bg-prices-preview
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: bgprices
+      POSTGRES_USER: ${POSTGRES_USER:-bgprices}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bgprices_dev_only}
+    volumes:
+      - bg_prices_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bgprices} -d bgprices"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      PORT: 8080
+      DB_URL: jdbc:postgresql://db:5432/bgprices
+      DB_USER: ${POSTGRES_USER:-bgprices}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-bgprices_dev_only}
+      DB_POOL_MAX: 5
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  osm-import:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    profiles: ["import"]
+    environment:
+      PORT: 8080
+      SPRING_PROFILES_ACTIVE: osm-import
+      DB_URL: jdbc:postgresql://db:5432/bgprices
+      DB_USER: ${POSTGRES_USER:-bgprices}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-bgprices_dev_only}
+      DB_POOL_MAX: 5
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  bg_prices_postgres:
