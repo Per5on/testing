@@ -20,6 +20,12 @@ class Branch(
     var city: String = "",
     @Column(length = 160)
     var settlement: String? = null,
+    @Column(name = "locality_type", nullable = false, length = 24)
+    var localityType: String = "OTHER",
+    @Column(length = 120)
+    var municipality: String? = null,
+    @Column(length = 120)
+    var region: String? = null,
     @Column(nullable = false, length = 300)
     var address: String = "",
     @Column(nullable = false)
@@ -41,6 +47,9 @@ data class BranchResponse(
     val branchName: String?,
     val city: String,
     val settlement: String?,
+    val localityType: String,
+    val municipality: String?,
+    val region: String?,
     val address: String,
     val latitude: Double,
     val longitude: Double,
@@ -49,6 +58,7 @@ data class BranchResponse(
 
 fun Branch.toResponse(distanceKm: Double? = null) = BranchResponse(
     id = requireNotNull(id), retailerCode = retailerCode, retailerName = retailerName,
-    branchName = branchName, city = city, settlement = settlement, address = address,
+    branchName = branchName, city = city, settlement = settlement, localityType = localityType,
+    municipality = municipality, region = region, address = address,
     latitude = latitude, longitude = longitude, distanceKm = distanceKm
 )
