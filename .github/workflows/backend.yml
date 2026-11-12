@@ -28,3 +28,16 @@ jobs:
         run: gradle -p backend build --no-daemon --stacktrace
       - name: Validate runtime container image
         run: docker build --tag bg-prices-preview:ci ./backend
+      - name: Smoke-test API against migrated PostgreSQL
+        run: |
+          docker compose up --build -d api
+          trap 'docker compose down -v' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:8080/actuator/health > /tmp/bg-prices-health.json; then
+              break
+            fi
+            sleep 2
+          done
+          grep -q '"status":"UP"' /tmp/bg-prices-health.json
+          curl --fail --silent 'http://localhost:8080/api/v1/catalog?locality=Veliko%20Tarnovo' | jq -e '.categories | length == 4'
+          curl --fail --silent 'http://localhost:8080/api/v1/localities?query=Ve' | jq -e 'type == "array"'
