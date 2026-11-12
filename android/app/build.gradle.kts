@@ -10,6 +10,8 @@ android {
 
     defaultConfig {
         applicationId = "bg.prices"
+        val apiBaseUrl = providers.gradleProperty("BG_PRICES_API_BASE_URL").orElse("").get()
+        buildConfigField("String", "API_BASE_URL", "\"${apiBaseUrl}\"")
         minSdk = 26
         targetSdk = 35
         // GitHub Actions supplies a monotonically increasing build number.
@@ -20,6 +22,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {
@@ -39,5 +42,7 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
