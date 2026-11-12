@@ -40,7 +40,7 @@ Submissions are anonymous and stored with PENDING status. The preview does not e
 ## Location and store data
 - Category and retailer reference records are seeded through PostgreSQL migrations.
 - The branch and locality directory is imported from OpenStreetMap. Only recognized retailer aliases are imported.
-- Branches without usable locality/address data are skipped rather than assigned invented coordinates.
+- Store features without coordinates or a reliable mapped locality within 25 km are skipped. If OSM has no street address, the branch is retained with locality-level address text rather than an invented street address. Bulgarian and Latin-script locality names are matched against the same mapped settlement.
 - OpenStreetMap data is community-maintained and may be incomplete. The app exposes source and refresh information; coverage depends on mapped data.
 - The OSM importer is no longer scheduled inside the API service. It is a one-shot job activated with Spring profile `osm-import`; the intended future scheduler is Cloud Scheduler triggering a Cloud Run Job at a 12-hour cadence.
 - The one-shot job uses connection/read timeouts and preserves existing rows when an Overpass request fails.
