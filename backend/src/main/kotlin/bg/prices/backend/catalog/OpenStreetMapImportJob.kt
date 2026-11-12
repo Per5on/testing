@@ -107,6 +107,7 @@ class OpenStreetMapImportJob(
                 val retailer = matchRetailer(candidate) ?: return@forEach
                 val city = firstTag(tags, "addr:city", "addr:town", "addr:village", "addr:place")
                     ?: return@forEach
+                val settlement = firstTag(tags, "addr:place", "addr:village", "addr:town") ?: city
                 val street = firstTag(tags, "addr:street", "addr:place")
                 val houseNumber = firstTag(tags, "addr:housenumber")
                 val postcode = firstTag(tags, "addr:postcode")
@@ -116,7 +117,7 @@ class OpenStreetMapImportJob(
                     retailer = retailer,
                     branchName = name.ifBlank { retailer.name },
                     city = city,
-                    settlement = city,
+                    settlement = settlement,
                     municipality = firstTag(tags, "addr:municipality"),
                     region = firstTag(tags, "addr:province", "is_in:state"),
                     address = address,
