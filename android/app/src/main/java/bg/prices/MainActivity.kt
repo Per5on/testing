@@ -140,9 +140,17 @@ private val translations = mapOf(
 private fun tr(language: String, key: String): String =
     translations[language]?.get(key) ?: translations["bg"]?.get(key) ?: key
 
-private data class PriceCategory(val key: String, val subtitleKey: String, val retailers: List<String>) {
-    fun title(language: String) = tr(language, key)
-    fun subtitle(language: String) = tr(language, subtitleKey)
+private data class PriceCategory(
+    val key: String,
+    val subtitleKey: String,
+    val retailers: List<String>,
+    val nameBg: String? = null,
+    val nameEn: String? = null,
+    val descriptionBg: String? = null,
+    val descriptionEn: String? = null
+) {
+    fun title(language: String) = if (language == "en") nameEn ?: tr(language, key) else nameBg ?: tr(language, key)
+    fun subtitle(language: String) = if (language == "en") descriptionEn ?: tr(language, subtitleKey) else descriptionBg ?: tr(language, subtitleKey)
 }
 
 private val defaultCategories = listOf(
@@ -233,6 +241,54 @@ private fun BgPricesApp() {
             }
         } else {
             locationLabel = tr(language, "permission_denied")
+        }
+    }
+
+
+    LaunchedEffect(locationLabel, locationCoordinates, radius, language) {
+        val baseUrl = BuildConfig.API_BASE_URL.trim()
+        if (baseUrl.isBlank()) {
+            categories.replaceAll { it.copy(retailers = emptyList()) }
+            catalogMessage = tr(language, "catalog_config_missing")
+        } else {
+            try {
+                val api = Retrofit.Builder()
+                    .baseUrl(if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/")
+                    .addConverterFactory(GsonConverterFactory.create())
+                    .build()
+                    .create(CatalogApi::class.java)
+                val coords = locationCoordinates.split(",").mapNotNull { it.trim().toDoubleOrNull() }
+                val hasCoordinates = coords.size == 2
+                val ignoredLabels = listOf(tr(language, "nearby"), tr(language, "permission_denied"), tr(language, "location_unavailable"))
+                val locality = locationLabel.takeIf { it.isNotBlank() && it !in ignoredLabels && !hasCoordinates }
+                val response = api.getCatalog(
+                    locality = locality,
+                    latitude = if (hasCoordinates) coords[0] else null,
+                    longitude = if (hasCoordinates) coords[1] else null,
+                    radiusKm = radius
+                )
+                val loaded = response.categories.map { item ->
+                    PriceCategory(
+                        key = item.code,
+                        subtitleKey = item.code + "_sub",
+                        retailers = item.retailers.map { it.name },
+                        nameBg = item.nameBg,
+                        nameEn = item.nameEn,
+                        descriptionBg = item.descriptionBg,
+                        descriptionEn = item.descriptionEn
+                    )
+                }
+                categories.clear()
+                categories.addAll(loaded)
+                if (selectedCategory !in categories.indices) selectedCategory = 0
+                if (selectedRetailer != null && categories.getOrNull(selectedCategory)?.retailers?.contains(selectedRetailer) != true) {
+                    selectedRetailer = null
+                }
+                catalogMessage = if (categories.none { it.retailers.isNotEmpty() }) tr(language, "no_stores_here") else ""
+            } catch (_: Exception) {
+                categories.replaceAll { it.copy(retailers = emptyList()) }
+                catalogMessage = tr(language, "catalog_error")
+            }
         }
     }
 
