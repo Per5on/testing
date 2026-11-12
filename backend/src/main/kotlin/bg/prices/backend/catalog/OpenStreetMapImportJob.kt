@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.transaction.annotation.Transactional
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
@@ -12,7 +12,8 @@ import org.springframework.web.client.RestClient
 @Component
 class OpenStreetMapImportJob(
     private val jdbc: JdbcTemplate,
-    private val mapper: ObjectMapper
+    private val mapper: ObjectMapper,
+    @Value("${catalog.osm.overpass-url}") private val overpassUrl: String
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val requestFactory = SimpleClientHttpRequestFactory().apply {
@@ -65,8 +66,8 @@ class OpenStreetMapImportJob(
         RetailerMatch("insa_oil", "Insa Oil", listOf("insa oil", "insaoil"))
     )
 
-    @Transactional
     fun importOnce() {
+        val startedAt = System.nanoTime()
         try {
             val query = """
                 [out:json][timeout:180];
@@ -79,7 +80,7 @@ class OpenStreetMapImportJob(
                 out center tags;
             """.trimIndent()
             val response = client.post()
-                .uri("https://overpass-api.de/api/interpreter")
+                .uri(overpassUrl)
                 .header("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
                 .body("data=" + java.net.URLEncoder.encode(query, Charsets.UTF_8))
                 .retrieve()
@@ -129,9 +130,9 @@ class OpenStreetMapImportJob(
                 )
                 branchesImported++
             }
-            log.info("OpenStreetMap import complete: {} populated places, {} matched retailer branches", localitiesImported, branchesImported)
+            log.info("OpenStreetMap import complete: {} populated places, {} matched retailer branches in {} ms", localitiesImported, branchesImported, (System.nanoTime() - startedAt) / 1_000_000)
         } catch (exception: Exception) {
-            log.warn("OpenStreetMap import failed; existing catalogue data is retained: {}", exception.message)
+            log.warn("OpenStreetMap import failed after {} ms; existing catalogue data is retained: {}", (System.nanoTime() - startedAt) / 1_000_000, exception.message)
         }
     }
 
