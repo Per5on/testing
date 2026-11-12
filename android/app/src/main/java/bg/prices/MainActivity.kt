@@ -104,6 +104,7 @@ private fun BgPricesApp() {
     var addType by remember { mutableStateOf("Suggestion") }
     var addText by remember { mutableStateOf("") }
     var profileView by remember { mutableStateOf("Grid") }
+    var selectedRetailer by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         containerColor = Paper,
@@ -144,9 +145,9 @@ private fun BgPricesApp() {
                     })
                     Spacer(Modifier.height(14.dp))
                     if (destination == Destination.CATEGORIES) {
-                        CategoryContent(categories[selectedCategory])
+                        CategoryContent(categories[selectedCategory], profileView, selectedRetailer, onRetailerSelect = { selectedRetailer = if (selectedRetailer == it) null else it })
                     } else {
-                        PricingContent(categories[selectedCategory])
+                        PricingContent(categories[selectedCategory], selectedRetailer)
                     }
                 }
                 Destination.BASKET -> BasketContent()
@@ -200,16 +201,34 @@ private fun CategoryRibbon(
 }
 
 @Composable
-private fun CategoryContent(category: PriceCategory) {
+private fun CategoryContent(category: PriceCategory, view: String, selectedRetailer: String?, onRetailerSelect: (String) -> Unit) {
     Text(category.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     Text(category.subtitle, style = MaterialTheme.typography.bodyMedium)
     Spacer(Modifier.height(12.dp))
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
-        items(category.retailers) { retailer ->
-            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Leaf)) {
-                Row(modifier = Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(retailer, fontWeight = FontWeight.Medium)
-                    Text("View prices  ›", color = DeepLeaf)
+    if (view == "Grid") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            category.retailers.chunked(2).forEach { pair ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pair.forEach { retailer ->
+                        Card(modifier = Modifier.weight(1f), onClick = { onRetailerSelect(retailer) }, colors = CardDefaults.cardColors(containerColor = if (selectedRetailer == retailer) Orange else Leaf)) {
+                            Column(Modifier.padding(14.dp)) {
+                                Text(retailer, fontWeight = FontWeight.Medium)
+                                Text(if (selectedRetailer == retailer) "Selected" else "View prices  ›", color = DeepLeaf, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    } else {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+            items(category.retailers.filter { selectedRetailer == null || it == selectedRetailer }) { retailer ->
+                Card(modifier = Modifier.fillMaxWidth(), onClick = { onRetailerSelect(retailer) }, colors = CardDefaults.cardColors(containerColor = if (selectedRetailer == retailer) Orange else Leaf)) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(retailer, fontWeight = FontWeight.Medium)
+                        Text(if (selectedRetailer == retailer) "Selected" else "View prices  ›", color = DeepLeaf)
+                    }
                 }
             }
         }
@@ -217,13 +236,14 @@ private fun CategoryContent(category: PriceCategory) {
 }
 
 @Composable
-private fun PricingContent(category: PriceCategory) {
+@Composable
+private fun PricingContent(category: PriceCategory, selectedRetailer: String?) {
     Text("Pricing · ${category.title}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     Text("Prices, promotions and price history", style = MaterialTheme.typography.bodyMedium)
     Spacer(Modifier.height(10.dp))
     Card(colors = CardDefaults.cardColors(containerColor = Orange)) {
         Column(Modifier.padding(14.dp)) {
-            Text("All stores comparison", fontWeight = FontWeight.Bold, color = DeepOrange)
+            Text(if (selectedRetailer == null) "All stores comparison" else "Selected store: $selectedRetailer", fontWeight = FontWeight.Bold, color = DeepOrange)
             Text("Choose a retailer in Categories to narrow this view. With no retailer selected, prices from all available stores will be compared.")
         }
     }
