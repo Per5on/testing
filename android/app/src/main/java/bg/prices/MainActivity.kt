@@ -248,7 +248,7 @@ private fun BgPricesApp() {
     LaunchedEffect(locationLabel, locationCoordinates, radius, language) {
         val baseUrl = BuildConfig.API_BASE_URL.trim()
         if (baseUrl.isBlank()) {
-            categories.replaceAll { it.copy(retailers = emptyList()) }
+            categories.indices.forEach { index -> categories[index] = categories[index].copy(retailers = emptyList()) }
             catalogMessage = tr(language, "catalog_config_missing")
         } else {
             try {
