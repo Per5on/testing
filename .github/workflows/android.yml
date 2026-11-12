@@ -1,21 +1,21 @@
-name: Android debug build
+name: Android preview build
 
 on:
+  push:
+    branches:
+      - 'preview/**'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# Do not cancel older builds when a newer commit is pushed.
-# Each run gets its own monotonically increasing app version and artifact.
-
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       APP_VERSION_CODE: ${{ github.run_number }}
-      APP_VERSION_NAME: 0.1.${{ github.run_number }}
+      APP_VERSION_NAME: 0.1.${{ github.run_number }}.preview
       BG_PRICES_API_BASE_URL: ${{ vars.BG_PRICES_API_BASE_URL }}
     steps:
       - name: Check out source
@@ -37,17 +37,17 @@ jobs:
         with:
           packages: ''
 
-      - name: Build versioned debug APK
+      - name: Build preview APK
         run: |
           gradle -p android assembleDebug --stacktrace \
             -PAPP_VERSION_CODE="$APP_VERSION_CODE" \
-            -PAPP_VERSION_NAME="$APP_VERSION_NAME" \\
+            -PAPP_VERSION_NAME="$APP_VERSION_NAME" \
             -PBG_PRICES_API_BASE_URL="$BG_PRICES_API_BASE_URL"
           mkdir -p artifacts
-          APK_NAME="BG-Prices-v${APP_VERSION_NAME}-build${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}.apk"
+          APK_NAME="BG-Prices-${APP_VERSION_NAME}-build${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}.preview.apk"
           cp android/app/build/outputs/apk/debug/app-debug.apk "artifacts/$APK_NAME"
           {
-            echo "App: BG Prices"
+            echo "App: BG Prices Preview"
             echo "Version name: $APP_VERSION_NAME"
             echo "Version code: $APP_VERSION_CODE"
             echo "Build number: $GITHUB_RUN_NUMBER"
@@ -56,10 +56,10 @@ jobs:
             echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           } > artifacts/build-info.txt
 
-      - name: Upload immutable build artifact
+      - name: Upload immutable preview artifact
         uses: actions/upload-artifact@v5
         with:
-          name: bg-prices-v${{ github.run_number }}-attempt-${{ github.run_attempt }}-${{ github.sha }}
+          name: bg-prices-${{ github.run_number }}.preview-attempt-${{ github.run_attempt }}-${{ github.sha }}
           path: artifacts/*
           if-no-files-found: error
           retention-days: 90
