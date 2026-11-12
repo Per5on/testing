@@ -26,3 +26,5 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
       - name: Build and test backend
         run: gradle -p backend build --no-daemon --stacktrace
+      - name: Validate runtime container image
+        run: docker build --tag bg-prices-preview:ci ./backend
