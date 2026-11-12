@@ -89,8 +89,9 @@ class CatalogController(private val jdbc: JdbcTemplate) {
             args += latitude
             args += radiusKm
         } else {
-            // Without a selected place, do not claim that any retailer is locally available.
-            return emptyList()
+            // No location is selected: don't claim physical branch availability.
+            // National online offers remain discoverable without a fabricated branch.
+            locationClause = "AND FALSE"
         }
 
         return jdbc.query(
@@ -98,10 +99,23 @@ class CatalogController(private val jdbc: JdbcTemplate) {
             SELECT r.code, r.name, r.website_url
             FROM catalog_retailers r
             WHERE r.active = TRUE AND r.category_code = ?
-              AND EXISTS (
-                SELECT 1 FROM store_branches b
-                WHERE b.active = TRUE AND LOWER(b.retailer_code) = LOWER(r.code)
-                $locationClause
+              AND (
+                EXISTS (
+                    SELECT 1 FROM store_branches b
+                    WHERE b.active = TRUE AND LOWER(b.retailer_code) = LOWER(r.code)
+                    $locationClause
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM price_observations po
+                    JOIN products p ON p.id = po.product_id
+                    WHERE po.price_scope = 'NATIONAL_ONLINE'
+                      AND LOWER(po.retailer_code) = LOWER(r.code)
+                      AND p.category_code = r.category_code
+                      AND po.verified = TRUE
+                      AND (po.valid_from IS NULL OR po.valid_from <= NOW())
+                      AND (po.valid_until IS NULL OR po.valid_until > NOW())
+                )
               )
             ORDER BY r.name
             """.trimIndent(),
