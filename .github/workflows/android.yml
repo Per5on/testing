@@ -10,14 +10,16 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+# Do not cancel older builds when a newer commit is pushed.
+# Each run gets its own monotonically increasing app version and artifact.
 
 jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      APP_VERSION_CODE: ${{ github.run_number }}
+      APP_VERSION_NAME: 0.1.${{ github.run_number }}
     steps:
       - name: Check out source
         uses: actions/checkout@v5
@@ -38,13 +40,29 @@ jobs:
         with:
           packages: ''
 
-      - name: Build debug APK
-        run: gradle -p android assembleDebug --stacktrace
+      - name: Build versioned debug APK
+        run: |
+          gradle -p android assembleDebug --stacktrace \
+            -PAPP_VERSION_CODE="$APP_VERSION_CODE" \
+            -PAPP_VERSION_NAME="$APP_VERSION_NAME"
+          mkdir -p artifacts
+          APK_NAME="BG-Prices-v${APP_VERSION_NAME}-build${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "artifacts/$APK_NAME"
+          {
+            echo "App: BG Prices"
+            echo "Version name: $APP_VERSION_NAME"
+            echo "Version code: $APP_VERSION_CODE"
+            echo "Build number: $GITHUB_RUN_NUMBER"
+            echo "Build attempt: $GITHUB_RUN_ATTEMPT"
+            echo "Commit: $GITHUB_SHA"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > artifacts/build-info.txt
 
-      - name: Upload APK
+      - name: Upload immutable build artifact
         uses: actions/upload-artifact@v5
         with:
-          name: bg-prices-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: bg-prices-v${{ github.run_number }}-attempt-${{ github.run_attempt }}-${{ github.sha }}
+          path: artifacts/*
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
+          overwrite: false
