@@ -173,11 +173,19 @@ private data class PriceCategory(
 }
 
 private val defaultCategories = listOf(
-    PriceCategory("groceries", "groceries_sub", listOf("Kaufland", "Lidl", "BILLA", "Fantastico", "T MARKET", "METRO", "Моят магазин", "CBA", "ProMarket", "HIT Max", "Burlex", "Klasiko", "ABC Market", "Mini Mart")),
-    PriceCategory("technology", "technology_sub", listOf("Technopolis", "Technomarket", "Zora", "Ardes", "Plesio", "Plasico", "Vali", "Jar Computers")),
-    PriceCategory("home", "home_sub", listOf("HomeMax", "Bauhaus", "IKEA", "JYSK", "Mr. Bricolage", "Praktiker", "Praktis", "Videnov", "Mondo")),
-    PriceCategory("fuel", "fuel_sub", listOf("Цените на горивата ще се показват при наличие на потвърдени данни"))
+    PriceCategory("groceries", "groceries_sub", emptyList()),
+    PriceCategory("technology", "technology_sub", emptyList()),
+    PriceCategory("home", "home_sub", emptyList()),
+    PriceCategory("fuel", "fuel_sub", emptyList())
 )
+
+private fun categoryEmoji(key: String): String = when (key) {
+    "groceries" -> "🍐"
+    "technology" -> "💻"
+    "home" -> "🛋️"
+    "fuel" -> "⛽"
+    else -> "🛍️"
+}
 
 
 private data class CatalogPayload(val categories: List<CatalogCategoryDto> = emptyList())
@@ -460,7 +468,7 @@ private fun CategoryRibbon(categories: List<PriceCategory>, selected: Int, langu
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             categories.forEachIndexed { index, category ->
-                FilterChip(selected == index, onClick = { onSelect(index) }, label = { Text(category.title(language), maxLines = 1) })
+                FilterChip(selected == index, onClick = { onSelect(index) }, label = { Text(categoryEmoji(category.key) + " " + category.title(language), maxLines = 1) })
             }
         }
         Column {
@@ -473,8 +481,13 @@ private fun CategoryRibbon(categories: List<PriceCategory>, selected: Int, langu
 
 @Composable
 private fun CategoryContent(category: PriceCategory, view: String, selectedRetailer: String?, language: String, emptyMessage: String, onRetailerSelect: (String) -> Unit) {
-    Text(category.title(language), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-    Text(category.subtitle(language), style = MaterialTheme.typography.bodyMedium)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(categoryEmoji(category.key), style = MaterialTheme.typography.headlineMedium)
+        Column {
+            Text(category.title(language), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(category.subtitle(language), style = MaterialTheme.typography.bodyMedium)
+        }
+    }
     Spacer(Modifier.height(10.dp))
 if (category.retailers.isEmpty()) {
         Card(colors = CardDefaults.cardColors(containerColor = Orange)) {
