@@ -1,5 +1,21 @@
-WITH samples(category_code, brand, name, variant, package_quantity, package_unit, retailer_code, retailer_name, price_eur, regular_price_eur, source_reference, valid_from, valid_until, price_note) AS (
-    VALUES
+CREATE TEMP TABLE bg_prices_demo_samples (
+    category_code VARCHAR(40) NOT NULL,
+    brand VARCHAR(160),
+    name VARCHAR(240) NOT NULL,
+    variant VARCHAR(240),
+    package_quantity NUMERIC(12,3),
+    package_unit VARCHAR(32),
+    retailer_code VARCHAR(80) NOT NULL,
+    retailer_name VARCHAR(160) NOT NULL,
+    price_eur NUMERIC(12,2) NOT NULL,
+    regular_price_eur NUMERIC(12,2),
+    source_reference VARCHAR(500) NOT NULL,
+    valid_from TIMESTAMPTZ,
+    valid_until TIMESTAMPTZ,
+    price_note VARCHAR(240)
+) ON COMMIT PRESERVE ROWS;
+
+INSERT INTO bg_prices_demo_samples VALUES
         ('groceries', 'Deluxe', 'Рустикален хляб с два вида квас', '500 g', 500, 'g', 'lidl', 'Lidl', 1.99, 2.99, 'https://www.lidl.bg/c/aktsiya/a10106189', '2026-11-09 00:00:00+02', '2026-11-16 00:00:00+02', 'Lidl Plus цена; промоция 09–15.11.2026; национална онлайн оферта, наличността по филиал не е потвърдена.'),
         ('groceries', NULL, 'Милинка', '140 g', 140, 'g', 'lidl', 'Lidl', 0.69, 0.99, 'https://www.lidl.bg/c/aktsiya/a10106189', '2026-11-09 00:00:00+02', '2026-11-16 00:00:00+02', 'Промоция 09–15.11.2026; национална онлайн оферта, наличността по филиал не е потвърдена.'),
         ('groceries', NULL, 'Бутерка', '70 g', 70, 'g', 'lidl', 'Lidl', 0.35, 0.49, 'https://www.lidl.bg/c/aktsiya/a10106189', '2026-11-09 00:00:00+02', '2026-11-16 00:00:00+02', 'Lidl Plus цена; промоция 09–15.11.2026; наличността по филиал не е потвърдена.'),
@@ -24,28 +40,27 @@ WITH samples(category_code, brand, name, variant, package_quantity, package_unit
         ('home', 'Einhell', 'CC-BC 10 E battery charger', NULL, NULL, NULL, 'praktiker', 'Praktiker', 35.99, 44.99, 'https://praktiker.bg/en/PredefinedProductList/10-11-2026-30-11-2026/c/weekly-offers?currentPage=1', '2026-11-10 00:00:00+02', '2026-12-01 00:00:00+02', 'Black Friday оферта 10–30.11.2026; наличността по филиал не е потвърдена.'),
         ('home', NULL, 'EKO MILANO kitchen 250 cm', NULL, NULL, NULL, 'praktiker', 'Praktiker', 269.99, 349.99, 'https://praktiker.bg/en/PredefinedProductList/10-11-2026-30-11-2026/c/weekly-offers?currentPage=1', '2026-11-10 00:00:00+02', '2026-12-01 00:00:00+02', 'Black Friday оферта 10–30.11.2026; наличността по филиал не е потвърдена.'),
         ('home', 'LEKO', 'Alkyd satin paint cherry 2.5 L', NULL, 2.5, 'L', 'praktiker', 'Praktiker', 13.99, 19.99, 'https://praktiker.bg/en/PredefinedProductList/10-11-2026-30-11-2026/c/weekly-offers?currentPage=1', '2026-11-10 00:00:00+02', '2026-12-01 00:00:00+02', 'Black Friday оферта 10–30.11.2026; наличността по филиал не е потвърдена.'),
-        ('home', 'Kapitan', 'Quattro towel rack 50 cm', NULL, NULL, NULL, 'praktiker', 'Praktiker', 22.99, 25.59, 'https://praktiker.bg/en/PredefinedProductList/10-11-2026-30-11-2026/c/weekly-offers?currentPage=1', '2026-11-10 00:00:00+02', '2026-12-01 00:00:00+02', 'Black Friday оферта 10–30.11.2026; наличността по филиал не е потвърдена.')
-), inserted_products AS (
-    INSERT INTO products(category_code, brand, name, variant, package_quantity, package_unit, normalized_name)
-    SELECT DISTINCT s.category_code, s.brand, s.name, s.variant, s.package_quantity, s.package_unit,
-           LOWER(TRIM(CONCAT_WS(' ', s.brand, s.name, s.variant)))
-    FROM samples s
-    WHERE NOT EXISTS (
-        SELECT 1 FROM products p
-        WHERE p.category_code = s.category_code
-          AND p.normalized_name = LOWER(TRIM(CONCAT_WS(' ', s.brand, s.name, s.variant)))
-    )
-    RETURNING id
-)
+        ('home', 'Kapitan', 'Quattro towel rack 50 cm', NULL, NULL, NULL, 'praktiker', 'Praktiker', 22.99, 25.59, 'https://praktiker.bg/en/PredefinedProductList/10-11-2026-30-11-2026/c/weekly-offers?currentPage=1', '2026-11-10 00:00:00+02', '2026-12-01 00:00:00+02', 'Black Friday оферта 10–30.11.2026; наличността по филиал не е потвърдена.');
+
+INSERT INTO products(category_code, brand, name, variant, package_quantity, package_unit, normalized_name)
+SELECT DISTINCT s.category_code, s.brand, s.name, s.variant, s.package_quantity, s.package_unit,
+       LOWER(TRIM(CONCAT_WS(' ', s.brand, s.name, s.variant)))
+FROM bg_prices_demo_samples s
+WHERE NOT EXISTS (
+    SELECT 1 FROM products p
+    WHERE p.category_code = s.category_code
+      AND p.normalized_name = LOWER(TRIM(CONCAT_WS(' ', s.brand, s.name, s.variant)))
+);
+
 INSERT INTO price_observations(
     product_id, branch_id, price_eur, regular_price_eur, currency, source, source_reference,
     verified, valid_from, valid_until, collected_at, created_at, price_note,
     price_scope, retailer_code, retailer_name
 )
 SELECT p.id, NULL, s.price_eur, s.regular_price_eur, 'EUR', 'retailer_web', s.source_reference,
-       TRUE, s.valid_from::timestamptz, s.valid_until::timestamptz, NOW(), NOW(), s.price_note,
+       TRUE, s.valid_from, s.valid_until, NOW(), NOW(), s.price_note,
        'NATIONAL_ONLINE', s.retailer_code, s.retailer_name
-FROM samples s
+FROM bg_prices_demo_samples s
 JOIN products p
   ON p.category_code = s.category_code
  AND p.normalized_name = LOWER(TRIM(CONCAT_WS(' ', s.brand, s.name, s.variant)))
@@ -56,8 +71,10 @@ WHERE NOT EXISTS (
       AND po.retailer_code = s.retailer_code
       AND po.source_reference = s.source_reference
       AND po.price_eur = s.price_eur
-      AND po.valid_until IS NOT DISTINCT FROM s.valid_until::timestamptz
+      AND po.valid_until IS NOT DISTINCT FROM s.valid_until
 );
 
 SELECT 'products' AS entity, COUNT(*) AS total FROM products
 UNION ALL SELECT 'national_online_prices', COUNT(*) FROM price_observations WHERE price_scope = 'NATIONAL_ONLINE';
+
+DROP TABLE bg_prices_demo_samples;
