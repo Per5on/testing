@@ -35,13 +35,13 @@ import kotlinx.coroutines.launch
 private val Leaf = Color(0xFFEAF5E1)
 private val DeepLeaf = Color(0xFF14532D)
 private val Orange = Color(0xFFFF9800)
-private val DeepOrange = Color(0xFFE87500)
+private val DeepOrange = Color(0xFFFF9800)
 private val Paper = Color(0xFFFFFCF8)
 private val BgPricesColors = lightColorScheme(
-    primary = DeepLeaf, onPrimary = Color.White, secondary = DeepOrange,
-    onSecondary = Color.White, tertiary = Color(0xFF6C8C63),
+    primary = DeepLeaf, onPrimary = Color.White, secondary = Orange,
+    onSecondary = DeepLeaf, tertiary = Color(0xFF6C8C63),
     background = Paper, surface = Color.White, surfaceVariant = Leaf,
-    secondaryContainer = Orange, onSecondaryContainer = DeepOrange
+    secondaryContainer = Orange, onSecondaryContainer = DeepLeaf
 )
 
 private val translations = mapOf(
@@ -365,7 +365,7 @@ private fun BgPricesApp() {
     Scaffold(
         containerColor = Paper,
         bottomBar = {
-            NavigationBar(containerColor = Color.White) {
+            NavigationBar(containerColor = Color.White, contentColor = DeepLeaf) {
                 listOf(
                     Destination.CATEGORIES to "categories", Destination.PRICING to "pricing",
                     Destination.BASKET to "basket", Destination.PROFILE to "profile"
@@ -373,6 +373,7 @@ private fun BgPricesApp() {
                     NavigationBarItem(
                         selected = destination == item,
                         onClick = { destination = item },
+                        colors = NavigationBarItemDefaults.colors(selectedIconColor = DeepLeaf, selectedTextColor = DeepLeaf, indicatorColor = Orange, unselectedIconColor = DeepLeaf.copy(alpha = 0.60f), unselectedTextColor = DeepLeaf.copy(alpha = 0.70f)),
                         icon = { Text(when (item) { Destination.CATEGORIES -> "▦"; Destination.PRICING -> "€"; Destination.BASKET -> "🛒"; Destination.PROFILE -> "●" }, fontWeight = FontWeight.Bold) },
                         label = { Text(tr(language, key)) }
                     )
@@ -380,21 +381,33 @@ private fun BgPricesApp() {
             }
         }
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 10.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Пестеливко", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = DeepLeaf)
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                Modifier.fillMaxWidth().background(DeepLeaf).padding(horizontal = 18.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("🐷  Пестеливко", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("BETA", Modifier.background(Orange, RoundedCornerShape(20.dp)).padding(horizontal = 12.dp, vertical = 6.dp), color = DeepLeaf, fontWeight = FontWeight.Bold)
                 }
-                Text("BETA", Modifier.background(Orange, RoundedCornerShape(20.dp)).padding(horizontal = 12.dp, vertical = 6.dp), color = DeepOrange, fontWeight = FontWeight.Bold)
+                Text(tr(language, "tagline"), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.88f))
             }
-            Spacer(Modifier.height(10.dp))
-            LocationSelector(
+            Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                    LocationSelector(
                 language = language, api = catalogApi, mode = locationMode,
                 selectedLocality = locationLabel, selectedPostalCode = postalCode,
                 onModeChange = { mode -> locationMode = mode; locationLabel = ""; postalCode = "" },
                 onLocalitySelected = { name -> locationMode = "locality"; locationLabel = name; postalCode = "" },
                 onPostalCodeSelected = { code -> locationMode = "postalCode"; postalCode = code; locationLabel = "" }
-            )
+                    )
+                }
+            }
             Spacer(Modifier.height(10.dp))
             when (destination) {
                 Destination.CATEGORIES, Destination.PRICING -> {
@@ -429,6 +442,7 @@ private fun BgPricesApp() {
                     onRemove = { id -> scope.launch { database.basketDao().delete(id) } }
                 )
                 Destination.PROFILE -> ProfileContent(profileView, language, onViewChange = { profileView = it }, onLanguageChange = { language = it }, onAddClick = { addStatus = ""; showAddDialog = true })
+            }
             }
         }
     }
