@@ -35,7 +35,7 @@ import kotlinx.coroutines.launch
 private val Leaf = Color(0xFFEAF5E1)
 private val DeepLeaf = Color(0xFF14532D)
 private val Orange = Color(0xFFFF9800)
-private val DeepOrange = Color(0xFF2E6B38)
+private val DeepOrange = Color(0xFFE87500)
 private val Paper = Color(0xFFFFFCF8)
 private val BgPricesColors = lightColorScheme(
     primary = DeepLeaf, onPrimary = Color.White, secondary = DeepOrange,

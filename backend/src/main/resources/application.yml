@@ -46,6 +46,3 @@ management:
     health:
       show-details: never
 
-catalog:
-  osm:
-    overpass-url: ${OSM_OVERPASS_URL:https://maps.mail.ru/osm/tools/overpass/api/interpreter}
