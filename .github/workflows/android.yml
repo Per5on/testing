@@ -6,6 +6,12 @@ on:
       - 'preview/**'
       - 'beta'
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "I approve publishing this beta APK as a GitHub Release"
+        required: true
+        type: boolean
+        default: false
 
 concurrency:
   group: pestelivko-${{ github.workflow }}-${{ github.ref }}
@@ -44,9 +50,9 @@ jobs:
 
       - name: Build preview APK
         run: |
-          gradle -p android assembleDebug --stacktrace \
-            -PAPP_VERSION_CODE="$APP_VERSION_CODE" \
-            -PAPP_VERSION_NAME="$APP_VERSION_NAME" \
+          gradle -p android assembleDebug --stacktrace \\
+            -PAPP_VERSION_CODE="$APP_VERSION_CODE" \\
+            -PAPP_VERSION_NAME="$APP_VERSION_NAME" \\
             -PBG_PRICES_API_BASE_URL="$BG_PRICES_API_BASE_URL"
           mkdir -p artifacts
           APK_NAME="Pestelivko-${APP_VERSION_NAME}-build${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}-beta.apk"
@@ -69,3 +75,31 @@ jobs:
           if-no-files-found: error
           retention-days: 90
           overwrite: false
+
+  publish-release:
+    name: Publish approved beta release
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release == true && github.ref == 'refs/heads/beta'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download this run's APK artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: pestelivko-${{ github.run_number }}.merged-preview-attempt-${{ github.run_attempt }}-${{ github.sha }}
+          path: artifacts
+
+      - name: Publish GitHub pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          SHORT_SHA: ${{ github.sha }}
+        run: |
+          TAG="beta-0.1.${RUN_NUMBER}-build${RUN_NUMBER}-${SHORT_SHA:0:7}-attempt${RUN_ATTEMPT}"
+          gh release create "$TAG" artifacts/*.apk artifacts/build-info.txt \\
+            --target "$GITHUB_SHA" \\
+            --title "Пестеливко Beta 0.1.${RUN_NUMBER} (build ${RUN_NUMBER})" \\
+            --notes "Approved beta APK for commit $GITHUB_SHA.\n\nBuilt by [GitHub Actions run #$RUN_NUMBER]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID).\n\nThis is a beta pre-release." \\
+            --prerelease
