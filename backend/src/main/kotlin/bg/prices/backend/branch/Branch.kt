@@ -26,12 +26,20 @@ class Branch(
     var municipality: String? = null,
     @Column(length = 120)
     var region: String? = null,
+    @Column(name = "postal_code", length = 4)
+    var postalCode: String? = null,
     @Column(nullable = false, length = 300)
     var address: String = "",
     @Column(nullable = false)
     var latitude: Double = 0.0,
     @Column(nullable = false)
     var longitude: Double = 0.0,
+    @Column(name = "source_type", length = 24)
+    var sourceType: String? = null,
+    @Column(name = "source_url", length = 1000)
+    var sourceUrl: String? = null,
+    @Column(name = "source_verified_at")
+    var sourceVerifiedAt: Instant? = null,
     @Column(nullable = false)
     var active: Boolean = true,
     @Column(name = "created_at", nullable = false)

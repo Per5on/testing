@@ -13,16 +13,39 @@ import java.time.Instant
 class CatalogController(private val jdbc: JdbcTemplate) {
 
     @GetMapping
-    @Cacheable(cacheNames = ["catalog"], key = "#locality + ':' + #latitude + ':' + #longitude + ':' + #radiusKm")
+    @Cacheable(
+        cacheNames = ["catalog"],
+        key = "#locality + ':' + #postalCode + ':' + #latitude + ':' + #longitude + ':' + #radiusKm"
+    )
     fun catalog(
         @RequestParam(required = false) locality: String?,
+        @RequestParam(required = false) postalCode: String?,
         @RequestParam(required = false) latitude: Double?,
         @RequestParam(required = false) longitude: Double?,
         @RequestParam(defaultValue = "10") radiusKm: Double = 10.0
     ): CatalogResponse {
-        require((latitude == null) == (longitude == null)) { "Latitude and longitude must be supplied together." }
+        require((latitude == null) == (longitude == null)) {
+            "Latitude and longitude must be supplied together."
+        }
+        val normalizedLocality = locality?.trim()?.takeIf { it.isNotBlank() }
+        val normalizedPostalCode = postalCode?.filterNot(Char::isWhitespace)?.takeIf { it.isNotBlank() }
+        val locationModes = listOf(
+            normalizedLocality != null,
+            normalizedPostalCode != null,
+            latitude != null
+        ).count { it }
+        require(locationModes <= 1) {
+            "Choose one location filter: locality, postal code, or coordinates."
+        }
+        if (normalizedPostalCode != null) {
+            require(normalizedPostalCode.matches(Regex("[0-9]{4}"))) {
+                "Bulgarian postal codes must contain exactly four digits."
+            }
+        }
         if (latitude != null) {
-            require(latitude in -90.0..90.0 && longitude!! in -180.0..180.0) { "Invalid coordinates." }
+            require(latitude in -90.0..90.0 && longitude!! in -180.0..180.0) {
+                "Invalid coordinates."
+            }
             require(radiusKm in 1.0..200.0) { "Radius must be between 1 and 200 km." }
         }
 
@@ -39,59 +62,75 @@ class CatalogController(private val jdbc: JdbcTemplate) {
                 nameEn = rs.getString("name_en"),
                 descriptionBg = rs.getString("description_bg"),
                 descriptionEn = rs.getString("description_en"),
-                retailers = availableRetailers(code, locality?.trim()?.takeIf { it.isNotBlank() }, latitude, longitude, radiusKm)
+                retailers = availableRetailers(
+                    code, normalizedLocality, normalizedPostalCode,
+                    latitude, longitude, radiusKm
+                )
             )
         }
-        return CatalogResponse(categories = categories, generatedAt = Instant.now().toString(), branchDataSource = "OpenStreetMap contributors", branchRefreshIntervalHours = 12)
+        return CatalogResponse(
+            categories = categories,
+            generatedAt = Instant.now().toString(),
+            branchDataSource = "Verified official retailer websites and apps",
+            branchRefreshIntervalHours = 24
+        )
     }
 
     private fun availableRetailers(
         categoryCode: String,
         locality: String?,
+        postalCode: String?,
         latitude: Double?,
         longitude: Double?,
         radiusKm: Double
     ): List<CatalogRetailer> {
         val locationClause: String
         val args = mutableListOf<Any>(categoryCode)
-        if (locality != null) {
-            locationClause = """
-                AND (
-                  LOWER(b.city) = LOWER(?)
-                  OR LOWER(COALESCE(b.settlement, '')) = LOWER(?)
-                  OR EXISTS (
-                    SELECT 1
-                    FROM inhabited_localities l
-                    WHERE (LOWER(l.name) = LOWER(?) OR LOWER(COALESCE(l.name_bg, '')) = LOWER(?))
-                      AND (
-                        LOWER(b.city) = LOWER(l.name)
-                        OR LOWER(COALESCE(b.settlement, '')) = LOWER(l.name)
-                        OR (l.name_bg IS NOT NULL AND LOWER(b.city) = LOWER(l.name_bg))
-                        OR (l.name_bg IS NOT NULL AND LOWER(COALESCE(b.settlement, '')) = LOWER(l.name_bg))
+        when {
+            locality != null -> {
+                locationClause = """
+                    AND (
+                      LOWER(b.city) = LOWER(?)
+                      OR LOWER(COALESCE(b.settlement, '')) = LOWER(?)
+                      OR EXISTS (
+                        SELECT 1
+                        FROM inhabited_localities l
+                        WHERE (LOWER(l.name) = LOWER(?) OR LOWER(COALESCE(l.name_bg, '')) = LOWER(?))
+                          AND (
+                            LOWER(b.city) = LOWER(l.name)
+                            OR LOWER(COALESCE(b.settlement, '')) = LOWER(l.name)
+                            OR (l.name_bg IS NOT NULL AND LOWER(b.city) = LOWER(l.name_bg))
+                            OR (l.name_bg IS NOT NULL AND LOWER(COALESCE(b.settlement, '')) = LOWER(l.name_bg))
+                          )
                       )
-                  )
-                )
-            """.trimIndent()
-            args += locality
-            args += locality
-            args += locality
-            args += locality
-        } else if (latitude != null && longitude != null) {
-            locationClause = """
-                AND (6371.0088 * acos(LEAST(1.0, GREATEST(-1.0,
-                    cos(radians(?)) * cos(radians(b.latitude)) *
-                    cos(radians(b.longitude) - radians(?)) +
-                    sin(radians(?)) * sin(radians(b.latitude))
-                )))) <= ?
-            """.trimIndent()
-            args += latitude
-            args += longitude
-            args += latitude
-            args += radiusKm
-        } else {
-            // No location is selected: don't claim physical branch availability.
-            // National online offers remain discoverable without a fabricated branch.
-            locationClause = "AND FALSE"
+                    )
+                """.trimIndent()
+                args += locality
+                args += locality
+                args += locality
+                args += locality
+            }
+            postalCode != null -> {
+                locationClause = "AND b.postal_code = ?"
+                args += postalCode
+            }
+            latitude != null && longitude != null -> {
+                locationClause = """
+                    AND (6371.0088 * acos(LEAST(1.0, GREATEST(-1.0,
+                        cos(radians(?)) * cos(radians(b.latitude)) *
+                        cos(radians(b.longitude) - radians(?)) +
+                        sin(radians(?)) * sin(radians(b.latitude))
+                    )))) <= ?
+                """.trimIndent()
+                args += latitude
+                args += longitude
+                args += latitude
+                args += radiusKm
+            }
+            else -> {
+                // A physical retailer is eligible only after a location is selected.
+                return emptyList()
+            }
         }
 
         return jdbc.query(
@@ -99,23 +138,15 @@ class CatalogController(private val jdbc: JdbcTemplate) {
             SELECT r.code, r.name, r.website_url
             FROM catalog_retailers r
             WHERE r.active = TRUE AND r.category_code = ?
-              AND (
-                EXISTS (
-                    SELECT 1 FROM store_branches b
-                    WHERE b.active = TRUE AND LOWER(b.retailer_code) = LOWER(r.code)
-                    $locationClause
-                )
-                OR EXISTS (
-                    SELECT 1
-                    FROM price_observations po
-                    JOIN products p ON p.id = po.product_id
-                    WHERE po.price_scope = 'NATIONAL_ONLINE'
-                      AND LOWER(po.retailer_code) = LOWER(r.code)
-                      AND p.category_code = r.category_code
-                      AND po.verified = TRUE
-                      AND (po.valid_from IS NULL OR po.valid_from <= NOW())
-                      AND (po.valid_until IS NULL OR po.valid_until > NOW())
-                )
+              AND EXISTS (
+                SELECT 1
+                FROM store_branches b
+                WHERE b.active = TRUE
+                  AND LOWER(b.retailer_code) = LOWER(r.code)
+                  AND b.source_type IN ('OFFICIAL_WEBSITE', 'OFFICIAL_APP')
+                  AND b.source_url IS NOT NULL
+                  AND b.source_verified_at IS NOT NULL
+                  $locationClause
               )
             ORDER BY r.name
             """.trimIndent(),
