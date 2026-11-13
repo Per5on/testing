@@ -32,10 +32,10 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val Leaf = Color(0xFFFFE8D2)
-private val DeepLeaf = Color(0xFF9A541D)
-private val Orange = Color(0xFFE5F3E5)
-private val DeepOrange = Color(0xFF356B43)
+private val Leaf = Color(0xFFEAF5E1)
+private val DeepLeaf = Color(0xFF14532D)
+private val Orange = Color(0xFFFF9800)
+private val DeepOrange = Color(0xFF2E6B38)
 private val Paper = Color(0xFFFFFCF8)
 private val BgPricesColors = lightColorScheme(
     primary = DeepLeaf, onPrimary = Color.White, secondary = DeepOrange,
@@ -80,7 +80,7 @@ private val translations = mapOf(
         "account" to "Акаунт и вход", "submissions" to "Моите предложения",
         "moderation" to "Опашка за модерация", "app_settings" to "Настройки на приложението",
         "category_order" to "Подредба на категориите", "location_settings" to "Настройки на местоположението",
-        "add_title" to "Добави в BG Prices", "suggestion" to "Предложение", "note" to "Бележка",
+        "add_title" to "Добави в Спестовник", "suggestion" to "Предложение", "note" to "Бележка",
         "opinion" to "Мнение", "online_bulgaria" to "Онлайн · България", "describe" to "Опиши: ", "review_note" to "Предложенията ще бъдат прегледани преди да се добавят в каталога.",
         "submit" to "Изпрати", "cancel" to "Отказ", "location_filter" to "Филтър по местоположение",
         "city_town" to "Населено място (град, село и др.)", "coordinates" to "Координати", "current_location" to "Използвай текущото местоположение",
@@ -136,7 +136,7 @@ private val translations = mapOf(
         "account" to "Account and sign in", "submissions" to "My submissions",
         "moderation" to "Moderation queue", "app_settings" to "App settings",
         "category_order" to "Category display order", "location_settings" to "Location settings",
-        "add_title" to "Add to BG Prices", "suggestion" to "Suggestion", "note" to "Note",
+        "add_title" to "Add to Спестовник", "suggestion" to "Suggestion", "note" to "Note",
         "opinion" to "Opinion", "online_bulgaria" to "Online · Bulgaria", "describe" to "Describe: ", "review_note" to "Submissions will be reviewed before appearing in the catalogue.",
         "submit" to "Submit", "cancel" to "Cancel", "location_filter" to "Location filter",
         "city_town" to "Inhabited place (city, town, village, etc.)", "coordinates" to "Coordinates", "current_location" to "Use current location",
@@ -192,6 +192,8 @@ private fun categoryEmoji(key: String): String = when (key) {
 
 
 private data class CatalogPayload(val categories: List<CatalogCategoryDto> = emptyList())
+private data class ProductDto(val id: String, val categoryCode: String, val barcode: String? = null, val brand: String? = null, val name: String, val variant: String? = null, val packageQuantity: Double? = null, val packageUnit: String? = null)
+private data class ProductPageDto(val items: List<ProductDto> = emptyList(), val total: Long = 0, val limit: Int = 30, val offset: Int = 0)
 private data class CatalogCategoryDto(
     val code: String,
     val nameBg: String,
@@ -231,6 +233,14 @@ private data class PriceCatalogItemDto(
 )
 
 private interface CatalogApi {
+    @GET("api/v1/products")
+    suspend fun searchProducts(
+        @Query("categoryCode") categoryCode: String,
+        @Query("query") query: String? = null,
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
+    ): ProductPageDto
+
     @GET("api/v1/prices/catalog")
     suspend fun getPriceCatalog(
         @Query("categoryCode") categoryCode: String,
@@ -297,6 +307,8 @@ private fun BgPricesApp() {
     var selectedCategory by remember { mutableIntStateOf(0) }
     var destination by remember { mutableStateOf(Destination.CATEGORIES) }
     var selectedRetailer by remember { mutableStateOf<String?>(null) }
+    val selectedProductIds = remember { mutableStateListOf<String>() }
+    val appliedProductIds = remember { mutableStateListOf<String>() }
     var profileView by remember { mutableStateOf(prefs.getString("category_view", "Grid") ?: "Grid") }
     var showAddDialog by remember { mutableStateOf(false) }
     var addType by remember { mutableStateOf("suggestion") }
@@ -371,7 +383,7 @@ private fun BgPricesApp() {
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 10.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("BG Prices", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = DeepLeaf)
+                    Text("Спестовник", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = DeepLeaf)
                 }
                 Text("BETA", Modifier.background(Orange, RoundedCornerShape(20.dp)).padding(horizontal = 12.dp, vertical = 6.dp), color = DeepOrange, fontWeight = FontWeight.Bold)
             }
@@ -394,12 +406,18 @@ private fun BgPricesApp() {
                     })
                     Spacer(Modifier.height(10.dp))
                     if (destination == Destination.CATEGORIES) {
-                        CategoryContent(categories[selectedCategory], profileView, selectedRetailer, language, catalogMessage) { selectedRetailer = if (selectedRetailer == it) null else it }
+                        CategoryContent(
+                            categories[selectedCategory], profileView, selectedRetailer, language, catalogMessage, catalogApi,
+                            selectedProductIds.toSet(),
+                            onProductToggle = { id, checked -> if (checked) { if (id !in selectedProductIds) selectedProductIds.add(id) } else selectedProductIds.remove(id) },
+                            onApplyProducts = { ids -> appliedProductIds.clear(); appliedProductIds.addAll(ids) },
+                            appliedCount = appliedProductIds.size
+                        ) { selectedRetailer = if (selectedRetailer == it) null else it }
                     } else {
                         PricingContent(
                             categories[selectedCategory], selectedRetailer, language,
                             if (locationMode == "postalCode") postalCode else locationLabel,
-                            locationMode, postalCode, catalogApi
+                            locationMode, postalCode, catalogApi, if (categories[selectedCategory].key == "groceries") appliedProductIds.toSet() else emptySet()
                         )
                     }
                 }
@@ -468,7 +486,11 @@ private fun CategoryRibbon(categories: List<PriceCategory>, selected: Int, langu
 }
 
 @Composable
-private fun CategoryContent(category: PriceCategory, view: String, selectedRetailer: String?, language: String, emptyMessage: String, onRetailerSelect: (String) -> Unit) {
+private fun CategoryContent(
+    category: PriceCategory, view: String, selectedRetailer: String?, language: String, emptyMessage: String,
+    api: CatalogApi?, selectedProductIds: Set<String>, onProductToggle: (String, Boolean) -> Unit,
+    onApplyProducts: (Set<String>) -> Unit, appliedCount: Int, onRetailerSelect: (String) -> Unit
+) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(categoryEmoji(category.key), style = MaterialTheme.typography.headlineMedium)
         Column {
@@ -477,6 +499,10 @@ private fun CategoryContent(category: PriceCategory, view: String, selectedRetai
         }
     }
     Spacer(Modifier.height(10.dp))
+    if (category.key == "groceries") {
+        ProductMultiSelect(language, api, selectedProductIds, appliedCount, onProductToggle, onApplyProducts)
+        Spacer(Modifier.height(10.dp))
+    }
 if (category.retailers.isEmpty()) {
         Card(colors = CardDefaults.cardColors(containerColor = Orange)) {
             Column(Modifier.fillMaxWidth().padding(14.dp)) {
@@ -521,7 +547,8 @@ private fun PricingContent(
     location: String,
     locationMode: String,
     postalCode: String,
-    api: CatalogApi?
+    api: CatalogApi?,
+    appliedProductIds: Set<String>
 ) {
     var priceItems by remember(category.key, selectedRetailer, location, locationMode, postalCode) {
         mutableStateOf(emptyList<PriceCatalogItemDto>())
@@ -531,7 +558,7 @@ private fun PricingContent(
     var refresh by remember { mutableIntStateOf(0) }
     val uriHandler = LocalUriHandler.current
 
-    LaunchedEffect(category.key, selectedRetailer, language, location, locationMode, postalCode, api, refresh) {
+    LaunchedEffect(category.key, selectedRetailer, language, location, locationMode, postalCode, api, appliedProductIds, refresh) {
         if (api == null) {
             priceItems = emptyList()
             failed = false
@@ -542,10 +569,11 @@ private fun PricingContent(
         try {
             val locality = location.takeIf { locationMode == "locality" && it.isNotBlank() }
             val selectedPostalCode = postalCode.takeIf { locationMode == "postalCode" && it.isNotBlank() }
-            priceItems = api.getPriceCatalog(
+            val loadedPrices = api.getPriceCatalog(
                 categoryCode = category.key, locality = locality, postalCode = selectedPostalCode,
                 retailerName = selectedRetailer, limit = 100
             )
+            priceItems = if (appliedProductIds.isEmpty()) loadedPrices else loadedPrices.filter { it.productId in appliedProductIds }
         } catch (_: Exception) {
             priceItems = emptyList()
             failed = true
@@ -729,70 +757,90 @@ private fun ProfileContent(view: String, language: String, onViewChange: (String
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LocationSelector(
     language: String, api: CatalogApi?, mode: String, selectedLocality: String, selectedPostalCode: String,
     onModeChange: (String) -> Unit, onLocalitySelected: (String) -> Unit, onPostalCodeSelected: (String) -> Unit
 ) {
-    var query by remember(mode, selectedLocality, selectedPostalCode) {
-        mutableStateOf(if (mode == "postalCode") selectedPostalCode else selectedLocality)
-    }
+    var query by remember(mode, selectedLocality, selectedPostalCode) { mutableStateOf(if (mode == "postalCode") selectedPostalCode else selectedLocality) }
     var suggestions by remember { mutableStateOf<List<LocalitySuggestionDto>>(emptyList()) }
+    var expanded by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
     LaunchedEffect(query, mode, api) {
-        val minLength = if (mode == "postalCode") 1 else 2
-        if (api == null || query.trim().length < minLength) suggestions = emptyList()
-        else {
-            delay(250)
-            suggestions = runCatching { api.searchLocalities(query.trim(), mode) }.getOrDefault(emptyList())
+        val term = query.trim()
+        val minimum = if (mode == "postalCode") 1 else 2
+        if (api == null || term.length < minimum) { suggestions = emptyList(); loading = false; failed = false }
+        else { delay(250); loading = true; failed = false
+            try { suggestions = api.searchLocalities(term, mode) }
+            catch (_: Exception) { suggestions = emptyList(); failed = true }
+            finally { loading = false }
         }
     }
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        OutlinedTextField(
-            value = query, onValueChange = { query = it.take(if (mode == "postalCode") 4 else 100); suggestions = emptyList() },
-            modifier = Modifier.widthIn(max = 320.dp).fillMaxWidth(), singleLine = true,
-            placeholder = { Text(if (mode == "postalCode") {
-                if (language == "bg") "Въведи пощенски код" else "Enter postal code"
-            } else {
-                if (language == "bg") "Търси населено място" else "Search settlement"
-            }) },
-            trailingIcon = { Text("⌄", color = DeepLeaf, fontWeight = FontWeight.Bold) }
-        )
-        Surface(color = DeepLeaf, shape = RoundedCornerShape(16.dp)) {
-            Row(Modifier.padding(horizontal = 10.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(mode == "locality", onClick = { onModeChange("locality") },
-                        colors = RadioButtonDefaults.colors(selectedColor = Color.White, unselectedColor = Color.White), modifier = Modifier.size(34.dp))
-                    Text(if (language == "bg") "населено място" else "settlement", color = Color.White, style = MaterialTheme.typography.labelMedium)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(mode == "postalCode", onClick = { onModeChange("postalCode") },
-                        colors = RadioButtonDefaults.colors(selectedColor = Color.White, unselectedColor = Color.White), modifier = Modifier.size(34.dp))
-                    Text(if (language == "bg") "пощ. код" else "postal code", color = Color.White, style = MaterialTheme.typography.labelMedium)
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = mode == "locality", onClick = { onModeChange("locality"); query = ""; expanded = false }, label = { Text(if (language == "bg") "Населено място" else "Settlement") })
+            FilterChip(selected = mode == "postalCode", onClick = { onModeChange("postalCode"); query = ""; expanded = false }, label = { Text(if (language == "bg") "Пощ. код" else "Postal code") })
+        }
+        ExposedDropdownMenuBox(expanded = expanded && suggestions.isNotEmpty(), onExpandedChange = { expanded = it }) {
+            OutlinedTextField(value = query, onValueChange = { query = it.take(if (mode == "postalCode") 4 else 100); expanded = true },
+                modifier = Modifier.menuAnchor().fillMaxWidth(), singleLine = true,
+                placeholder = { Text(if (mode == "postalCode") { if (language == "bg") "Въведи пощенски код" else "Enter postal code" } else { if (language == "bg") "Търсете населено място..." else "Search settlement..." }) },
+                trailingIcon = { IconButton(onClick = { expanded = !expanded }) { Text(if (expanded) "⌃" else "⌄", color = DeepLeaf, fontWeight = FontWeight.Bold) } }
+            )
+            ExposedDropdownMenu(expanded = expanded && suggestions.isNotEmpty(), onDismissRequest = { expanded = false }) {
+                suggestions.forEach { item ->
+                    val label = if (mode == "postalCode") listOfNotNull(item.postalCode, item.nameBg ?: item.name).joinToString(" · ") else item.nameBg?.takeIf { language == "bg" && it.isNotBlank() } ?: item.name
+                    DropdownMenuItem(text = { Column { Text(label, fontWeight = FontWeight.SemiBold); val detail = listOf(item.type.takeIf { it.isNotBlank() }, item.municipality, item.region).filterNotNull().joinToString(" · "); if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.labelSmall, color = DeepOrange) } },
+                        onClick = { if (mode == "postalCode") { item.postalCode?.let(onPostalCodeSelected); query = item.postalCode.orEmpty() } else { onLocalitySelected(label); query = label }; expanded = false; suggestions = emptyList() })
                 }
             }
         }
-        if (suggestions.isNotEmpty()) {
-            Card(Modifier.widthIn(max = 320.dp).fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                LazyColumn(Modifier.heightIn(max = 190.dp)) {
-                    items(suggestions) { item ->
-                        val label = if (mode == "postalCode") listOf(item.postalCode, item.nameBg ?: item.name).filterNotNull().joinToString(" · ")
-                            else item.nameBg?.takeIf { language == "bg" && it.isNotBlank() } ?: item.name
-                        Column(Modifier.fillMaxWidth().clickable {
-                            if (mode == "postalCode") { item.postalCode?.let(onPostalCodeSelected); query = item.postalCode.orEmpty() }
-                            else { onLocalitySelected(label); query = label }
-                            suggestions = emptyList()
-                        }.padding(horizontal = 12.dp, vertical = 9.dp)) {
-                            Text(label, fontWeight = FontWeight.SemiBold)
-                            val detail = listOf(item.type.takeIf { it.isNotBlank() }, item.municipality, item.region).filterNotNull().joinToString(" · ")
-                            if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.labelSmall, color = DeepOrange)
-                        }
-                    }
-                }
-            }
+        when {
+            loading -> Text(if (language == "bg") "Търсене..." else "Searching...", color = DeepOrange, style = MaterialTheme.typography.labelSmall)
+            failed -> Text(if (language == "bg") "Неуспешно зареждане. Провери връзката." else "Could not load suggestions. Check your connection.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+            expanded && query.isNotBlank() && suggestions.isEmpty() -> Text(if (language == "bg") "Няма намерени предложения." else "No suggestions found.", color = DeepOrange, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
 
+@Composable
+private fun ProductMultiSelect(language: String, api: CatalogApi?, selectedIds: Set<String>, appliedCount: Int, onToggle: (String, Boolean) -> Unit, onApply: (Set<String>) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    var products by remember { mutableStateOf<List<ProductDto>>(emptyList()) }
+    var loading by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    LaunchedEffect(api, query) {
+        if (api == null) { products = emptyList(); return@LaunchedEffect }
+        if (query.isNotBlank() && query.trim().length < 2) { products = emptyList(); return@LaunchedEffect }
+        delay(220); loading = true; failed = false
+        try { products = api.searchProducts("groceries", query.trim().takeIf { it.isNotBlank() }, 60, 0).items }
+        catch (_: Exception) { products = emptyList(); failed = true }
+        finally { loading = false }
+    }
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text(if (language == "bg") "Търси продукт..." else "Search products...") })
+            when {
+                loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                failed -> Text(if (language == "bg") "Продуктите не се заредиха." else "Products could not be loaded.", color = MaterialTheme.colorScheme.error)
+                products.isEmpty() -> Text(if (language == "bg") "Няма налични продукти в каталога за този филтър." else "No products are available in the catalogue for this filter.", color = DeepOrange)
+                else -> Column(verticalArrangement = Arrangement.spacedBy(2.dp)) { products.forEach { product ->
+                    Row(Modifier.fillMaxWidth().clickable { onToggle(product.id, product.id !in selectedIds) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = product.id in selectedIds, onCheckedChange = { onToggle(product.id, it) })
+                        Column(Modifier.weight(1f)) { Text((product.brand?.let { "$it " } ?: "") + product.name, fontWeight = FontWeight.Medium); product.variant?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = DeepOrange) } }
+                    }
+                } }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { selectedIds.forEach { onToggle(it, false) }; onApply(emptySet()) }) { Text(if (language == "bg") "Изчисти избора" else "Clear selection") }
+                Button(onClick = { onApply(selectedIds) }) { Text(if (language == "bg") "Приложи (${selectedIds.size})" else "Apply (${selectedIds.size})") }
+            }
+            if (appliedCount > 0) Text(if (language == "bg") "Активен филтър: $appliedCount продукта" else "Active filter: $appliedCount products", style = MaterialTheme.typography.labelSmall, color = DeepLeaf)
+        }
+    }
+}
 @Composable
 private fun InfoCard(title: String, description: String) {
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Leaf)) {

@@ -30,10 +30,10 @@ class Branch(
     var postalCode: String? = null,
     @Column(nullable = false, length = 300)
     var address: String = "",
-    @Column(nullable = false)
-    var latitude: Double = 0.0,
-    @Column(nullable = false)
-    var longitude: Double = 0.0,
+    @Column
+    var latitude: Double? = null,
+    @Column
+    var longitude: Double? = null,
     @Column(name = "source_type", length = 24)
     var sourceType: String? = null,
     @Column(name = "source_url", length = 1000)
@@ -63,8 +63,8 @@ data class BranchResponse(
     val sourceUrl: String?,
     val sourceVerifiedAt: Instant?,
     val address: String,
-    val latitude: Double,
-    val longitude: Double,
+    val latitude: Double?,
+    val longitude: Double?,
     val distanceKm: Double?
 )
 

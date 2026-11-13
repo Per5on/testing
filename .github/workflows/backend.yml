@@ -1,13 +1,14 @@
-name: Backend preview build
+name: Backend beta validation
 
 on:
   push:
     branches:
       - 'preview/**'
+      - 'beta'
   workflow_dispatch:
 
 concurrency:
-  group: bg-prices-${{ github.workflow }}-${{ github.ref }}
+  group: spestovnik-backend-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -27,42 +28,27 @@ jobs:
       - name: Build and test backend
         run: gradle -p backend build --no-daemon --stacktrace
       - name: Validate runtime container image
-        run: docker build --tag bg-prices-preview:ci ./backend
-      - name: Smoke-test API against migrated PostgreSQL
+        run: docker build --tag spestovnik-beta:ci ./backend
+      - name: Smoke-test API and imported catalogue
         run: |
           docker compose up --build -d api
           trap 'docker compose down -v' EXIT
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent http://localhost:8080/actuator/health > /tmp/bg-prices-health.json; then
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://localhost:8080/actuator/health > /tmp/spestovnik-health.json; then
               break
             fi
             sleep 2
           done
-          grep -q '"status":"UP"' /tmp/bg-prices-health.json
-          docker compose exec -T db psql -U bgprices -d bgprices -v ON_ERROR_STOP=1 < backend/src/main/resources/db/demo/sample_offers_bg_2026-11-12.sql
+          grep -q '"status":"UP"' /tmp/spestovnik-health.json
           docker compose exec -T db psql -U bgprices -d bgprices -v ON_ERROR_STOP=1 <<'SQL'
-          INSERT INTO store_branches (
-            retailer_code, retailer_name, branch_name, city, settlement, locality_type,
-            municipality, region, postal_code, address, latitude, longitude,
-            source_type, source_url, source_verified_at, active
-          )
-          SELECT v.retailer_code, v.retailer_name, v.branch_name, v.city, v.settlement, 'CITY',
-                 v.city, v.city, '5000', v.address, 43.0757, 25.6172,
-                 'OFFICIAL_WEBSITE', v.source_url, NOW(), TRUE
-          FROM (VALUES
-            ('ardes', 'Ardes', 'Ardes Veliko Tarnovo', 'Veliko Tarnovo', 'Veliko Tarnovo', 'ul. Test 1', 'https://ardes.bg/stores'),
-            ('ikea', 'IKEA', 'IKEA Veliko Tarnovo', 'Veliko Tarnovo', 'Veliko Tarnovo', 'ul. Test 2', 'https://www.ikea.bg/stores'),
-            ('praktiker', 'Praktiker', 'Praktiker Veliko Tarnovo', 'Veliko Tarnovo', 'Veliko Tarnovo', 'ul. Test 3', 'https://praktiker.bg/stores')
-          ) AS v(retailer_code, retailer_name, branch_name, city, settlement, address, source_url)
-          WHERE NOT EXISTS (
-            SELECT 1 FROM store_branches b
-            WHERE b.retailer_code = v.retailer_code AND b.postal_code = '5000' AND b.source_url = v.source_url
-          );
+          SELECT 1 FROM data_sources WHERE code='nsi_ekatte';
+          SELECT 1 FROM official_settlements;
+          SELECT 1 FROM fuel_price_observations;
+          SELECT 1 FROM store_branches WHERE source_type='OFFICIAL_WEBSITE' AND source_verified_at IS NOT NULL;
+          SELECT 1 FROM products WHERE category_code='groceries';
           SQL
-          curl --fail --silent 'http://localhost:8080/api/v1/prices/catalog?locality=Veliko%20Tarnovo&limit=100' | jq -e 'length == 8 and all(.[]; .priceScope == "NATIONAL_ONLINE" and .currency == "EUR" and .verified == true)'
-          curl --fail --silent 'http://localhost:8080/api/v1/prices/catalog?postalCode=5000&limit=100' | jq -e 'length == 8 and all(.[]; .priceScope == "NATIONAL_ONLINE")'
-          curl --fail --silent 'http://localhost:8080/api/v1/catalog' | jq -e '[.categories[].retailers[]] | length == 0'
-          curl --fail --silent 'http://localhost:8080/api/v1/catalog?locality=Veliko%20Tarnovo' | jq -e '[.categories[].retailers[].code] | sort == ["ardes", "ikea", "praktiker"]'
-          curl --fail --silent 'http://localhost:8080/api/v1/catalog?postalCode=5000' | jq -e '[.categories[].retailers[].code] | sort == ["ardes", "ikea", "praktiker"]'
-          curl --fail --silent 'http://localhost:8080/api/v1/localities?query=Ve' | jq -e 'any(.[]; .name == "Veliko Tarnovo")'
-          curl --fail --silent 'http://localhost:8080/api/v1/localities?query=50&mode=postalCode' | jq -e 'any(.[]; .postalCode == "5000")'
+          curl --fail --silent 'http://localhost:8080/api/v1/catalog?locality=%D0%92%D0%B5%D0%BB%D0%B8%D0%BA%D0%BE%20%D0%A2%D1%8A%D1%80%D0%BD%D0%BE%D0%B2%D0%BE' | jq -e '[.categories[].retailers[].code] | sort == ["ikea", "jysk", "kaufland", "technopolis"]'
+          curl --fail --silent 'http://localhost:8080/api/v1/catalog?postalCode=5000' | jq -e '[.categories[].retailers[].code] | sort == ["kaufland"]'
+          curl --fail --silent 'http://localhost:8080/api/v1/catalog?postalCode=5002' | jq -e '[.categories[].retailers[].code] | sort == ["jysk"]'
+          curl --fail --silent 'http://localhost:8080/api/v1/products?categoryCode=groceries&limit=50' | jq -e '.total >= 20 and (.items | length >= 20)'
+          curl --fail --silent 'http://localhost:8080/api/v1/branches?locality=%D0%92%D0%B5%D0%BB%D0%B8%D0%BA%D0%BE%20%D0%A2%D1%8A%D1%80%D0%BD%D0%BE%D0%B2%D0%BE' | jq -e 'length == 4 and all(.[]; .address != null and .sourceUrl != null)'

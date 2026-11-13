@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'preview/**'
+      - 'beta'
   workflow_dispatch:
 
 concurrency:
@@ -48,10 +49,10 @@ jobs:
             -PAPP_VERSION_NAME="$APP_VERSION_NAME" \
             -PBG_PRICES_API_BASE_URL="$BG_PRICES_API_BASE_URL"
           mkdir -p artifacts
-          APK_NAME="BG-Prices-${APP_VERSION_NAME}-build${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}-merged.preview.apk"
+          APK_NAME="Spestovnik-${APP_VERSION_NAME}-build${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}-beta.apk"
           cp android/app/build/outputs/apk/debug/app-debug.apk "artifacts/$APK_NAME"
           {
-            echo "App: BG Prices Preview"
+            echo "App: Спестовник Beta"
             echo "Version name: $APP_VERSION_NAME"
             echo "Version code: $APP_VERSION_CODE"
             echo "Build number: $GITHUB_RUN_NUMBER"
