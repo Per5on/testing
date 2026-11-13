@@ -80,7 +80,7 @@ private val translations = mapOf(
         "account" to "Акаунт и вход", "submissions" to "Моите предложения",
         "moderation" to "Опашка за модерация", "app_settings" to "Настройки на приложението",
         "category_order" to "Подредба на категориите", "location_settings" to "Настройки на местоположението",
-        "add_title" to "Добави в Спестовник", "suggestion" to "Предложение", "note" to "Бележка",
+        "add_title" to "Добави в Пестеливко", "suggestion" to "Предложение", "note" to "Бележка",
         "opinion" to "Мнение", "online_bulgaria" to "Онлайн · България", "describe" to "Опиши: ", "review_note" to "Предложенията ще бъдат прегледани преди да се добавят в каталога.",
         "submit" to "Изпрати", "cancel" to "Отказ", "location_filter" to "Филтър по местоположение",
         "city_town" to "Населено място (град, село и др.)", "coordinates" to "Координати", "current_location" to "Използвай текущото местоположение",
@@ -91,7 +91,7 @@ private val translations = mapOf(
         "location_unavailable" to "Няма налични координати от устройството. Провери дали услугите за местоположение са включени или въведи координати ръчно.",
         "invalid_location" to "Въведи град/село или валидни координати.",
         "no_stores_here" to "Няма потвърдени магазини от тази категория в избраното населено място.",
-        "catalog_config_missing" to "Каталогът ще се зареди след свързване с BG Prices сървъра.",
+        "catalog_config_missing" to "Каталогът ще се зареди след свързване с Пестеливко сървъра.",
         "choose_location_first" to "Избери населено място или текущо местоположение, за да видиш наличните магазини.",
         "catalog_error" to "Каталогът временно не е достъпен. Провери връзката и опитай отново.",
         "location_all" to "Всички локации", "nearby" to "Близо до мен",
@@ -136,7 +136,7 @@ private val translations = mapOf(
         "account" to "Account and sign in", "submissions" to "My submissions",
         "moderation" to "Moderation queue", "app_settings" to "App settings",
         "category_order" to "Category display order", "location_settings" to "Location settings",
-        "add_title" to "Add to Спестовник", "suggestion" to "Suggestion", "note" to "Note",
+        "add_title" to "Add to Пестеливко", "suggestion" to "Suggestion", "note" to "Note",
         "opinion" to "Opinion", "online_bulgaria" to "Online · Bulgaria", "describe" to "Describe: ", "review_note" to "Submissions will be reviewed before appearing in the catalogue.",
         "submit" to "Submit", "cancel" to "Cancel", "location_filter" to "Location filter",
         "city_town" to "Inhabited place (city, town, village, etc.)", "coordinates" to "Coordinates", "current_location" to "Use current location",
@@ -147,7 +147,7 @@ private val translations = mapOf(
         "location_unavailable" to "No device coordinates are available. Check that location services are enabled or enter coordinates manually.",
         "invalid_location" to "Enter a city/town or valid coordinates.",
         "no_stores_here" to "No verified stores in this category are available at the selected location.",
-        "catalog_config_missing" to "The catalogue will load once the BG Prices server is connected.",
+        "catalog_config_missing" to "The catalogue will load once the Пестеливко server is connected.",
         "choose_location_first" to "Choose an inhabited place or your current location to see available stores.",
         "catalog_error" to "The catalogue is temporarily unavailable. Check the connection and try again.",
         "location_all" to "All locations", "nearby" to "Near me",
@@ -383,7 +383,7 @@ private fun BgPricesApp() {
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 10.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Спестовник", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = DeepLeaf)
+                    Text("Пестеливко", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = DeepLeaf)
                 }
                 Text("BETA", Modifier.background(Orange, RoundedCornerShape(20.dp)).padding(horizontal = 12.dp, vertical = 6.dp), color = DeepOrange, fontWeight = FontWeight.Bold)
             }
