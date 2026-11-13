@@ -56,24 +56,21 @@ class PriceController(private val jdbc: JdbcTemplate) {
     fun catalog(
         @RequestParam(required = false) categoryCode: String?,
         @RequestParam(required = false) locality: String?,
-        @RequestParam(required = false) latitude: Double?,
-        @RequestParam(required = false) longitude: Double?,
-        @RequestParam(defaultValue = "10") radiusKm: Int,
+        @RequestParam(required = false) postalCode: String?,
         @RequestParam(required = false) retailerName: String?,
         @RequestParam(defaultValue = "100") limit: Int
     ): List<PriceCatalogResponse> {
         require(limit in 1..200) { "Limit must be between 1 and 200." }
         require(categoryCode == null || Regex("^[a-z0-9_]{1,40}$").matches(categoryCode)) { "Invalid category code." }
         require(locality == null || locality.trim().length in 2..120) { "Locality must contain 2 to 120 characters." }
-        require(retailerName == null || retailerName.trim().length in 2..160) { "Retailer name must contain 2 to 160 characters." }
-        require((latitude == null) == (longitude == null)) { "Latitude and longitude must be supplied together." }
-        require(latitude == null || latitude in -90.0..90.0) { "Invalid latitude." }
-        require(longitude == null || longitude in -180.0..180.0) { "Invalid longitude." }
-        require(radiusKm in 1..50) { "Radius must be between 1 and 50 km." }
+        require(postalCode == null || postalCode.matches(Regex("^[0-9]{4}$"))) { "Postal code must contain exactly four digits." }
+        require(locality.isNullOrBlank() || postalCode.isNullOrBlank()) { "Choose locality or postal code, not both." }
+        require(retailerName == null || retailerName.trim().length in 2..160) { "Invalid retailer name." }
+        if (locality.isNullOrBlank() && postalCode.isNullOrBlank()) return emptyList()
 
         val filters = mutableListOf(
             "p.active = TRUE",
-            "(po.price_scope = 'NATIONAL_ONLINE' OR b.active = TRUE)",
+            "(po.price_scope = 'NATIONAL_ONLINE' OR (b.active = TRUE AND b.source_type IN ('OFFICIAL_WEBSITE', 'OFFICIAL_APP') AND b.source_url IS NOT NULL AND b.source_verified_at IS NOT NULL))",
             "po.verified = TRUE",
             "(po.valid_from IS NULL OR po.valid_from <= NOW())",
             "(po.valid_until IS NULL OR po.valid_until > NOW())"
@@ -82,28 +79,43 @@ class PriceController(private val jdbc: JdbcTemplate) {
         if (!categoryCode.isNullOrBlank()) {
             filters += "p.category_code = ?"
             args += categoryCode
+            if (categoryCode == "groceries") filters += "po.price_scope = 'NATIONAL_ONLINE'"
         }
-        if (!locality.isNullOrBlank() && latitude == null) {
-            filters += "(po.price_scope = 'NATIONAL_ONLINE' OR LOWER(b.city) = LOWER(?) OR LOWER(COALESCE(b.settlement, '')) = LOWER(?))"
-            args += locality.trim()
-            args += locality.trim()
+
+        val onlineBranchMatch = when {
+            !locality.isNullOrBlank() -> "(LOWER(location_branch.city) = LOWER(?) OR LOWER(COALESCE(location_branch.settlement, '')) = LOWER(?))"
+            !postalCode.isNullOrBlank() -> "location_branch.postal_code = ?"
+            else -> null
         }
-        if (latitude != null && longitude != null) {
+        if (onlineBranchMatch != null) {
+            val physicalBranchMatch = if (!locality.isNullOrBlank()) {
+                "(LOWER(b.city) = LOWER(?) OR LOWER(COALESCE(b.settlement, '')) = LOWER(?))"
+            } else {
+                "b.postal_code = ?"
+            }
             filters += """
-                (po.price_scope = 'NATIONAL_ONLINE' OR (
-                b.latitude IS NOT NULL AND b.longitude IS NOT NULL AND
-                (6371.0088 * 2 * ASIN(SQRT(
-                    POWER(SIN(RADIANS(b.latitude - ?) / 2), 2) +
-                    COS(RADIANS(?)) * COS(RADIANS(b.latitude)) *
-                    POWER(SIN(RADIANS(b.longitude - ?) / 2), 2)
-                ))) <= ?
-                ))
+                (
+                  (po.price_scope = 'BRANCH' AND $physicalBranchMatch)
+                  OR
+                  (po.price_scope = 'NATIONAL_ONLINE' AND EXISTS (
+                    SELECT 1 FROM store_branches location_branch
+                    WHERE location_branch.active = TRUE
+                      AND LOWER(location_branch.retailer_code) = LOWER(po.retailer_code)
+                      AND location_branch.source_type IN ('OFFICIAL_WEBSITE', 'OFFICIAL_APP')
+                      AND location_branch.source_url IS NOT NULL
+                      AND location_branch.source_verified_at IS NOT NULL
+                      AND $onlineBranchMatch
+                  ))
+                )
             """.trimIndent()
-            args += latitude
-            args += latitude
-            args += longitude
-            args += radiusKm.toDouble()
+            if (!locality.isNullOrBlank()) {
+                repeat(4) { args += locality.trim() }
+            } else {
+                args += postalCode!!
+                args += postalCode!!
+            }
         }
+
         if (!retailerName.isNullOrBlank()) {
             filters += "LOWER(COALESCE(b.retailer_name, po.retailer_name)) = LOWER(?)"
             args += retailerName.trim()

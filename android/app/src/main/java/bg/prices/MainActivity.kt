@@ -1,14 +1,9 @@
 package bg.prices
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
-import android.location.LocationManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -37,10 +32,10 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val Leaf = Color(0xFFE5F3E5)
-private val DeepLeaf = Color(0xFF356B43)
-private val Orange = Color(0xFFFFE8D2)
-private val DeepOrange = Color(0xFF9A541D)
+private val Leaf = Color(0xFFFFE8D2)
+private val DeepLeaf = Color(0xFF9A541D)
+private val Orange = Color(0xFFE5F3E5)
+private val DeepOrange = Color(0xFF356B43)
 private val Paper = Color(0xFFFFFCF8)
 private val BgPricesColors = lightColorScheme(
     primary = DeepLeaf, onPrimary = Color.White, secondary = DeepOrange,
@@ -79,7 +74,7 @@ private val translations = mapOf(
         "savings" to "Обобщение на спестяванията", "savings_desc" to "Очакваните спестявания ще се покажат при наличие на потвърдени цени.",
         "demo_basket" to "Демонстрационен изглед · Все още няма актуални цени или изчислени спестявания.",
         "profile_settings" to "Профил и настройки", "profile_sub" to "Акаунт · предложения · модерация · настройки",
-        "data_sources" to "Източници на данни", "osm_attribution" to "Местоположения и обекти от OpenStreetMap. Данните за картата се обновяват на всеки 12 часа; покритието зависи от наличната информация в картата.",
+        "data_sources" to "Източници на данни",
         "display" to "Изглед на категориите", "grid" to "Мрежа", "list" to "Списък",
         "language" to "Език на приложението", "bulgarian" to "Български", "english" to "Английски",
         "account" to "Акаунт и вход", "submissions" to "Моите предложения",
@@ -135,7 +130,7 @@ private val translations = mapOf(
         "savings" to "Savings overview", "savings_desc" to "Estimated savings will appear when verified prices are available.",
         "demo_basket" to "Demo layout only · no live prices or calculated savings yet.",
         "profile_settings" to "Profile & Settings", "profile_sub" to "Account · submissions · moderation · settings",
-        "data_sources" to "Data sources", "osm_attribution" to "Places and mapped locations from OpenStreetMap. Map data refreshes every 12 hours; coverage depends on information available in the map.",
+        "data_sources" to "Data sources",
         "display" to "Category display", "grid" to "Grid", "list" to "List",
         "language" to "App language", "bulgarian" to "Bulgarian", "english" to "English",
         "account" to "Account and sign in", "submissions" to "My submissions",
@@ -206,7 +201,7 @@ private data class CatalogCategoryDto(
     val retailers: List<CatalogRetailerDto> = emptyList()
 )
 private data class CatalogRetailerDto(val code: String, val name: String, val websiteUrl: String? = null)
-private data class LocalitySuggestionDto(val id: String, val name: String, val nameBg: String?, val type: String, val municipality: String?, val region: String?)
+private data class LocalitySuggestionDto(val id: String, val name: String, val nameBg: String?, val type: String, val municipality: String?, val region: String?, val postalCode: String? = null)
 private data class SubmissionRequestDto(val type: String, val content: String, val locationLabel: String?, val latitude: Double?, val longitude: Double?)
 private data class SubmissionAcceptedDto(val id: String, val status: String)
 private data class PriceCatalogItemDto(
@@ -240,9 +235,7 @@ private interface CatalogApi {
     suspend fun getPriceCatalog(
         @Query("categoryCode") categoryCode: String,
         @Query("locality") locality: String? = null,
-        @Query("latitude") latitude: Double? = null,
-        @Query("longitude") longitude: Double? = null,
-        @Query("radiusKm") radiusKm: Int = 10,
+        @Query("postalCode") postalCode: String? = null,
         @Query("retailerName") retailerName: String? = null,
         @Query("limit") limit: Int = 100
     ): List<PriceCatalogItemDto>
@@ -250,13 +243,11 @@ private interface CatalogApi {
     @GET("api/v1/catalog")
     suspend fun getCatalog(
         @Query("locality") locality: String? = null,
-        @Query("latitude") latitude: Double? = null,
-        @Query("longitude") longitude: Double? = null,
-        @Query("radiusKm") radiusKm: Int = 10
+        @Query("postalCode") postalCode: String? = null
     ): CatalogPayload
 
     @GET("api/v1/localities")
-    suspend fun searchLocalities(@Query("query") query: String): List<LocalitySuggestionDto>
+    suspend fun searchLocalities(@Query("query") query: String, @Query("mode") mode: String): List<LocalitySuggestionDto>
 
     @POST("api/v1/submissions")
     suspend fun submit(@Body request: SubmissionRequestDto): SubmissionAcceptedDto
@@ -299,69 +290,39 @@ private fun BgPricesApp() {
     }
     var language by remember { mutableStateOf(prefs.getString("language", "bg") ?: "bg") }
     var locationLabel by remember { mutableStateOf(prefs.getString("location_label", "") ?: "") }
-    var locationCoordinates by remember { mutableStateOf(prefs.getString("location_coordinates", "") ?: "") }
-    var radius by remember { mutableStateOf(prefs.getInt("location_radius", 10)) }
+    var locationMode by remember { mutableStateOf(prefs.getString("location_mode", "locality") ?: "locality") }
+    var postalCode by remember { mutableStateOf(prefs.getString("postal_code", "") ?: "") }
     val categories = remember { mutableStateListOf<PriceCategory>().apply { addAll(defaultCategories.map { it.copy(retailers = emptyList()) }) } }
     var catalogMessage by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableIntStateOf(0) }
     var destination by remember { mutableStateOf(Destination.CATEGORIES) }
     var selectedRetailer by remember { mutableStateOf<String?>(null) }
     var profileView by remember { mutableStateOf(prefs.getString("category_view", "Grid") ?: "Grid") }
-    var showLocationDialog by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var addType by remember { mutableStateOf("suggestion") }
     var addText by remember { mutableStateOf("") }
     var addStatus by remember { mutableStateOf("") }
 
-    LaunchedEffect(language, locationLabel, locationCoordinates, radius, profileView) {
+    LaunchedEffect(language, locationLabel, locationMode, postalCode, profileView) {
         prefs.edit()
             .putString("language", language)
             .putString("location_label", locationLabel)
-            .putString("location_coordinates", locationCoordinates)
-            .putInt("location_radius", radius)
+            .putString("location_mode", locationMode)
+            .putString("postal_code", postalCode)
             .putString("category_view", profileView)
             .apply()
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-        val granted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-            grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (granted) {
-            val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            val location = try {
-                manager.getProviders(true).mapNotNull { provider ->
-                    try { manager.getLastKnownLocation(provider) } catch (_: SecurityException) { null }
-                }.maxByOrNull { it.time }
-            } catch (_: Exception) { null }
-            if (location != null) {
-                locationCoordinates = String.format(java.util.Locale.US, "%.6f, %.6f", location.latitude, location.longitude)
-                locationLabel = tr(language, "nearby")
-            } else {
-                locationLabel = tr(language, "location_unavailable")
-            }
-        } else {
-            locationLabel = tr(language, "permission_denied")
-        }
-    }
-
-
-    LaunchedEffect(locationLabel, locationCoordinates, radius, language) {
+    LaunchedEffect(locationLabel, locationMode, postalCode, language) {
         val baseUrl = BuildConfig.API_BASE_URL.trim()
         if (catalogApi == null || baseUrl.isBlank()) {
             categories.indices.forEach { index -> categories[index] = categories[index].copy(retailers = emptyList()) }
             catalogMessage = tr(language, "catalog_config_missing")
         } else {
             try {
-                val coords = locationCoordinates.split(",").mapNotNull { it.trim().toDoubleOrNull() }
-                val hasCoordinates = coords.size == 2
-                val ignoredLabels = listOf(tr(language, "nearby"), tr(language, "permission_denied"), tr(language, "location_unavailable"))
-                val locality = locationLabel.takeIf { it.isNotBlank() && it !in ignoredLabels && !hasCoordinates }
-                val response = catalogApi.getCatalog(
-                    locality = locality,
-                    latitude = if (hasCoordinates) coords[0] else null,
-                    longitude = if (hasCoordinates) coords[1] else null,
-                    radiusKm = radius
-                )
+                val locality = locationLabel.takeIf { locationMode == "locality" && it.isNotBlank() }
+                val selectedPostalCode = postalCode.takeIf { locationMode == "postalCode" && it.isNotBlank() }
+                val response = catalogApi.getCatalog(locality = locality, postalCode = selectedPostalCode)
                 val loaded = response.categories.map { item ->
                     PriceCategory(
                         key = item.code,
@@ -381,7 +342,7 @@ private fun BgPricesApp() {
                 if (selectedRetailer != null && categories.getOrNull(selectedCategory)?.retailers?.contains(selectedRetailer) != true) {
                     selectedRetailer = null
                 }
-                catalogMessage = if (locality == null && !hasCoordinates) tr(language, "choose_location_first") else if (categories.none { it.retailers.isNotEmpty() }) tr(language, "no_stores_here") else ""
+                catalogMessage = if (locality == null && selectedPostalCode == null) tr(language, "choose_location_first") else if (categories.none { it.retailers.isNotEmpty() }) tr(language, "no_stores_here") else ""
             } catch (_: Exception) {
                 categories.replaceAll { it.copy(retailers = emptyList()) }
                 catalogMessage = tr(language, "catalog_error")
@@ -411,20 +372,17 @@ private fun BgPricesApp() {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("BG Prices", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = DeepLeaf)
-                    Text(tr(language, "tagline"), style = MaterialTheme.typography.bodyMedium, color = DeepOrange)
                 }
                 Text("BETA", Modifier.background(Orange, RoundedCornerShape(20.dp)).padding(horizontal = 12.dp, vertical = 6.dp), color = DeepOrange, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(10.dp))
-            OutlinedButton(onClick = { showLocationDialog = true }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)) {
-                Text("📍")
-                Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-                    Text(locationLabel.ifBlank { tr(language, "choose_location") }, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Text(if (locationCoordinates.isNotBlank()) locationCoordinates + " · " + radius + " km" else tr(language, "location"), style = MaterialTheme.typography.labelSmall)
-                }
-                Text("⌄", fontWeight = FontWeight.Bold)
-            }
+            LocationSelector(
+                language = language, api = catalogApi, mode = locationMode,
+                selectedLocality = locationLabel, selectedPostalCode = postalCode,
+                onModeChange = { mode -> locationMode = mode; locationLabel = ""; postalCode = "" },
+                onLocalitySelected = { name -> locationMode = "locality"; locationLabel = name; postalCode = "" },
+                onPostalCodeSelected = { code -> locationMode = "postalCode"; postalCode = code; locationLabel = "" }
+            )
             Spacer(Modifier.height(10.dp))
             when (destination) {
                 Destination.CATEGORIES, Destination.PRICING -> {
@@ -438,34 +396,23 @@ private fun BgPricesApp() {
                     if (destination == Destination.CATEGORIES) {
                         CategoryContent(categories[selectedCategory], profileView, selectedRetailer, language, catalogMessage) { selectedRetailer = if (selectedRetailer == it) null else it }
                     } else {
-                        PricingContent(categories[selectedCategory], selectedRetailer, language, locationLabel, catalogApi, locationCoordinates, radius)
+                        PricingContent(
+                            categories[selectedCategory], selectedRetailer, language,
+                            if (locationMode == "postalCode") postalCode else locationLabel,
+                            locationMode, postalCode, catalogApi
+                        )
                     }
                 }
                 Destination.BASKET -> BasketContent(
-                    categories[selectedCategory], selectedRetailer, language, locationLabel, basketItems,
+                    categories[selectedCategory], selectedRetailer, language,
+                    if (locationMode == "postalCode") postalCode else locationLabel, basketItems,
                     onAdd = { name -> scope.launch { database.basketDao().insert(BasketItemEntity(name = name, categoryCode = categories[selectedCategory].key)) } },
                     onQuantityChange = { id, delta -> scope.launch { database.basketDao().changeQuantity(id, delta) } },
                     onRemove = { id -> scope.launch { database.basketDao().delete(id) } }
                 )
-                Destination.PROFILE -> ProfileContent(profileView, language, onViewChange = { profileView = it }, onLanguageChange = { language = it }, onLocationClick = { showLocationDialog = true }, onAddClick = { addStatus = ""; showAddDialog = true })
+                Destination.PROFILE -> ProfileContent(profileView, language, onViewChange = { profileView = it }, onLanguageChange = { language = it }, onAddClick = { addStatus = ""; showAddDialog = true })
             }
         }
-    }
-
-    if (showLocationDialog) {
-        LocationDialog(
-            language = language, initialLabel = locationLabel, initialCoordinates = locationCoordinates,
-            initialRadius = radius, api = catalogApi, onCurrentLocation = {
-                permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-            },
-            onDismiss = { showLocationDialog = false },
-            onSave = { label, coordinates, newRadius ->
-                locationLabel = label
-                locationCoordinates = coordinates
-                radius = newRadius
-                showLocationDialog = false
-            }
-        )
     }
 
     if (showAddDialog) {
@@ -489,11 +436,11 @@ private fun BgPricesApp() {
                 if (api == null) addStatus = tr(language, "catalog_config_missing")
                 else scope.launch {
                     try {
-                        val coords = locationCoordinates.split(",").mapNotNull { it.trim().toDoubleOrNull() }
+
                         api.submit(SubmissionRequestDto(
                             type = addType.uppercase(), content = addText.trim(),
                             locationLabel = locationLabel.takeIf { it.isNotBlank() },
-                            latitude = coords.getOrNull(0), longitude = coords.getOrNull(1)
+                            latitude = null, longitude = null
                         ))
                         addStatus = tr(language, "add_sent")
                         addText = ""
@@ -507,7 +454,6 @@ private fun BgPricesApp() {
 
 @Composable
 private fun CategoryRibbon(categories: List<PriceCategory>, selected: Int, language: String, onSelect: (Int) -> Unit, onMove: (Int, Int) -> Unit) {
-    Text(tr(language, "categories").uppercase(), style = MaterialTheme.typography.labelLarge, color = DeepLeaf, fontWeight = FontWeight.Bold)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             categories.forEachIndexed { index, category ->
@@ -519,7 +465,6 @@ private fun CategoryRibbon(categories: List<PriceCategory>, selected: Int, langu
             TextButton(onClick = { onMove(selected, selected + 1) }, enabled = selected < categories.lastIndex, contentPadding = PaddingValues(2.dp)) { Text("→") }
         }
     }
-    Text(tr(language, "select_category"), style = MaterialTheme.typography.labelSmall, color = DeepOrange)
 }
 
 @Composable
@@ -574,11 +519,11 @@ private fun PricingContent(
     selectedRetailer: String?,
     language: String,
     location: String,
-    api: CatalogApi?,
-    coordinates: String,
-    radius: Int
+    locationMode: String,
+    postalCode: String,
+    api: CatalogApi?
 ) {
-    var priceItems by remember(category.key, selectedRetailer, location, coordinates) {
+    var priceItems by remember(category.key, selectedRetailer, location, locationMode, postalCode) {
         mutableStateOf(emptyList<PriceCatalogItemDto>())
     }
     var loading by remember { mutableStateOf(false) }
@@ -586,7 +531,7 @@ private fun PricingContent(
     var refresh by remember { mutableIntStateOf(0) }
     val uriHandler = LocalUriHandler.current
 
-    LaunchedEffect(category.key, selectedRetailer, language, location, coordinates, radius, api, refresh) {
+    LaunchedEffect(category.key, selectedRetailer, language, location, locationMode, postalCode, api, refresh) {
         if (api == null) {
             priceItems = emptyList()
             failed = false
@@ -595,22 +540,11 @@ private fun PricingContent(
         loading = true
         failed = false
         try {
-            val parsed = coordinates.split(",").mapNotNull { it.trim().toDoubleOrNull() }
-            val hasCoordinates = parsed.size == 2
-            val ignoredLabels = listOf(
-                tr(language, "nearby"),
-                tr(language, "permission_denied"),
-                tr(language, "location_unavailable")
-            )
-            val locality = location.takeIf { it.isNotBlank() && it !in ignoredLabels && !hasCoordinates }
+            val locality = location.takeIf { locationMode == "locality" && it.isNotBlank() }
+            val selectedPostalCode = postalCode.takeIf { locationMode == "postalCode" && it.isNotBlank() }
             priceItems = api.getPriceCatalog(
-                categoryCode = category.key,
-                locality = locality,
-                latitude = if (hasCoordinates) parsed[0] else null,
-                longitude = if (hasCoordinates) parsed[1] else null,
-                radiusKm = radius,
-                retailerName = selectedRetailer,
-                limit = 100
+                categoryCode = category.key, locality = locality, postalCode = selectedPostalCode,
+                retailerName = selectedRetailer, limit = 100
             )
         } catch (_: Exception) {
             priceItems = emptyList()
@@ -751,7 +685,7 @@ private fun BasketContent(
     InfoCard(tr(language, "savings"), tr(language, "savings_desc"))
 }
 @Composable
-private fun ProfileContent(view: String, language: String, onViewChange: (String) -> Unit, onLanguageChange: (String) -> Unit, onLocationClick: () -> Unit, onAddClick: () -> Unit) {
+private fun ProfileContent(view: String, language: String, onViewChange: (String) -> Unit, onLanguageChange: (String) -> Unit, onAddClick: () -> Unit) {
     Text(tr(language, "profile_settings"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     Text(tr(language, "profile_sub"), style = MaterialTheme.typography.bodyMedium)
     Spacer(Modifier.height(8.dp))
@@ -778,14 +712,6 @@ private fun ProfileContent(view: String, language: String, onViewChange: (String
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Orange), onClick = onLocationClick) {
-                Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(tr(language, "location_settings"), fontWeight = FontWeight.SemiBold)
-                    Text("›", color = DeepOrange)
-                }
-            }
-        }
-        item {
             Card(colors = CardDefaults.cardColors(containerColor = Leaf)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(tr(language, "display"), fontWeight = FontWeight.SemiBold)
@@ -804,70 +730,67 @@ private fun ProfileContent(view: String, language: String, onViewChange: (String
 }
 
 @Composable
-private fun LocationDialog(language: String, initialLabel: String, initialCoordinates: String, initialRadius: Int, api: CatalogApi?, onCurrentLocation: () -> Unit, onDismiss: () -> Unit, onSave: (String, String, Int) -> Unit) {
-    var mode by remember { mutableStateOf(if (initialCoordinates.isNotBlank()) "coordinates" else "city") }
-    var city by remember { mutableStateOf(if (initialLabel == tr(language, "nearby")) "" else initialLabel) }
-    var coordinates by remember { mutableStateOf(initialCoordinates) }
-    var radius by remember { mutableIntStateOf(initialRadius) }
-    var error by remember { mutableStateOf("") }
+private fun LocationSelector(
+    language: String, api: CatalogApi?, mode: String, selectedLocality: String, selectedPostalCode: String,
+    onModeChange: (String) -> Unit, onLocalitySelected: (String) -> Unit, onPostalCodeSelected: (String) -> Unit
+) {
+    var query by remember(mode, selectedLocality, selectedPostalCode) {
+        mutableStateOf(if (mode == "postalCode") selectedPostalCode else selectedLocality)
+    }
     var suggestions by remember { mutableStateOf<List<LocalitySuggestionDto>>(emptyList()) }
-    LaunchedEffect(city, mode, api) {
-        if (mode != "city" || api == null || city.trim().length < 2) { suggestions = emptyList() }
+    LaunchedEffect(query, mode, api) {
+        val minLength = if (mode == "postalCode") 1 else 2
+        if (api == null || query.trim().length < minLength) suggestions = emptyList()
         else {
-            delay(350)
-            suggestions = runCatching { api.searchLocalities(city.trim()) }.getOrDefault(emptyList())
+            delay(250)
+            suggestions = runCatching { api.searchLocalities(query.trim(), mode) }.getOrDefault(emptyList())
         }
     }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(tr(language, "location_filter")) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(mode == "city", onClick = { mode = "city"; error = "" }, label = { Text(tr(language, "city_town")) })
-                    FilterChip(mode == "coordinates", onClick = { mode = "coordinates"; error = "" }, label = { Text(tr(language, "coordinates")) })
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        OutlinedTextField(
+            value = query, onValueChange = { query = it.take(if (mode == "postalCode") 4 else 100); suggestions = emptyList() },
+            modifier = Modifier.widthIn(max = 320.dp).fillMaxWidth(), singleLine = true,
+            placeholder = { Text(if (mode == "postalCode") {
+                if (language == "bg") "Въведи пощенски код" else "Enter postal code"
+            } else {
+                if (language == "bg") "Търси населено място" else "Search settlement"
+            }) },
+            trailingIcon = { Text("⌄", color = DeepLeaf, fontWeight = FontWeight.Bold) }
+        )
+        Surface(color = DeepLeaf, shape = RoundedCornerShape(16.dp)) {
+            Row(Modifier.padding(horizontal = 10.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(mode == "locality", onClick = { onModeChange("locality") },
+                        colors = RadioButtonDefaults.colors(selectedColor = Color.White, unselectedColor = Color.White), modifier = Modifier.size(34.dp))
+                    Text(if (language == "bg") "населено място" else "settlement", color = Color.White, style = MaterialTheme.typography.labelMedium)
                 }
-                if (mode == "city") {
-                    OutlinedTextField(value = city, onValueChange = { city = it; error = "" }, label = { Text(tr(language, "city_town")) }, placeholder = { Text(tr(language, "city_placeholder")) }, singleLine = true)
-                    if (suggestions.isNotEmpty()) {
-                        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 150.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            items(suggestions) { item ->
-                                Column(Modifier.fillMaxWidth().clickable { city = item.nameBg?.takeIf { language == "bg" && it.isNotBlank() } ?: item.name; suggestions = emptyList() }.padding(8.dp)) {
-                                    Text(item.nameBg?.takeIf { language == "bg" && it.isNotBlank() } ?: item.name, fontWeight = FontWeight.SemiBold)
-                                    Text(listOf(item.type.lowercase(), item.municipality, item.region).filterNotNull().joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = DeepOrange)
-                                }
-                            }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(mode == "postalCode", onClick = { onModeChange("postalCode") },
+                        colors = RadioButtonDefaults.colors(selectedColor = Color.White, unselectedColor = Color.White), modifier = Modifier.size(34.dp))
+                    Text(if (language == "bg") "пощ. код" else "postal code", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+        if (suggestions.isNotEmpty()) {
+            Card(Modifier.widthIn(max = 320.dp).fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                LazyColumn(Modifier.heightIn(max = 190.dp)) {
+                    items(suggestions) { item ->
+                        val label = if (mode == "postalCode") listOf(item.postalCode, item.nameBg ?: item.name).filterNotNull().joinToString(" · ")
+                            else item.nameBg?.takeIf { language == "bg" && it.isNotBlank() } ?: item.name
+                        Column(Modifier.fillMaxWidth().clickable {
+                            if (mode == "postalCode") { item.postalCode?.let(onPostalCodeSelected); query = item.postalCode.orEmpty() }
+                            else { onLocalitySelected(label); query = label }
+                            suggestions = emptyList()
+                        }.padding(horizontal = 12.dp, vertical = 9.dp)) {
+                            Text(label, fontWeight = FontWeight.SemiBold)
+                            val detail = listOf(item.type.takeIf { it.isNotBlank() }, item.municipality, item.region).filterNotNull().joinToString(" · ")
+                            if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.labelSmall, color = DeepOrange)
                         }
                     }
-                } else {
-                    OutlinedTextField(value = coordinates, onValueChange = { coordinates = it; error = "" }, label = { Text(tr(language, "coordinates")) }, placeholder = { Text(tr(language, "coordinates_placeholder")) }, singleLine = true)
                 }
-                OutlinedButton(onClick = onCurrentLocation, modifier = Modifier.fillMaxWidth()) { Text(tr(language, "current_location")) }
-                Text(tr(language, "radius"), fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    listOf(5, 10, 25, 50).forEach { km ->
-                        FilterChip(radius == km, onClick = { radius = km }, label = { Text(km.toString() + " km") })
-                    }
-                }
-                Text(tr(language, "location_note"), style = MaterialTheme.typography.bodySmall, color = DeepOrange)
-                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
-        },
-        confirmButton = {
-            Button(onClick = {
-                if (mode == "city" && city.isNotBlank()) onSave(city.trim(), "", radius)
-                else {
-                    val parts = coordinates.split(",").map { it.trim().toDoubleOrNull() }
-                    val valid = parts.size == 2 && parts[0] != null && parts[1] != null &&
-                        parts[0]!! in -90.0..90.0 && parts[1]!! in -180.0..180.0
-                    if (valid) onSave(tr(language, "nearby"), String.format(java.util.Locale.US, "%.6f, %.6f", parts[0], parts[1]), radius)
-                    else error = tr(language, "invalid_location")
-                }
-            }) { Text(tr(language, "save_location")) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(tr(language, "cancel")) } }
-    )
+        }
+    }
 }
 
 @Composable

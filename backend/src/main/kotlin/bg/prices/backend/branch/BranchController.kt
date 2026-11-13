@@ -11,19 +11,17 @@ import org.springframework.web.server.ResponseStatusException
 @RequestMapping("/api/v1/branches")
 class BranchController(private val service: BranchService) {
     @GetMapping
-    fun inLocality(@RequestParam locality: String) = service.inLocality(locality)
-
-    @GetMapping("/localities")
-    fun searchLocalities(@RequestParam query: String) = service.searchLocalities(query)
-
-    @GetMapping("/nearby")
-    fun nearby(
-        @RequestParam latitude: Double,
-        @RequestParam longitude: Double,
-        @RequestParam(defaultValue = "10") radiusKm: Double
-    ) = try {
-        service.nearby(latitude, longitude, radiusKm)
-    } catch (exception: IllegalArgumentException) {
-        throw ResponseStatusException(HttpStatus.BAD_REQUEST, exception.message)
+    fun inLocation(
+        @RequestParam(required = false) locality: String?,
+        @RequestParam(required = false) postalCode: String?
+    ): List<BranchResponse> {
+        if (!locality.isNullOrBlank() && !postalCode.isNullOrBlank()) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose locality or postal code.")
+        }
+        return when {
+            !locality.isNullOrBlank() -> service.inLocality(locality)
+            !postalCode.isNullOrBlank() -> service.inPostalCode(postalCode)
+            else -> emptyList()
+        }
     }
 }

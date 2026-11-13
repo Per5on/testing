@@ -58,6 +58,10 @@ data class BranchResponse(
     val localityType: String,
     val municipality: String?,
     val region: String?,
+    val postalCode: String?,
+    val sourceType: String?,
+    val sourceUrl: String?,
+    val sourceVerifiedAt: Instant?,
     val address: String,
     val latitude: Double,
     val longitude: Double,
@@ -67,6 +71,8 @@ data class BranchResponse(
 fun Branch.toResponse(distanceKm: Double? = null) = BranchResponse(
     id = requireNotNull(id), retailerCode = retailerCode, retailerName = retailerName,
     branchName = branchName, city = city, settlement = settlement, localityType = localityType,
-    municipality = municipality, region = region, address = address,
+    municipality = municipality, region = region, postalCode = postalCode,
+    sourceType = sourceType, sourceUrl = sourceUrl, sourceVerifiedAt = sourceVerifiedAt,
+    address = address,
     latitude = latitude, longitude = longitude, distanceKm = distanceKm
 )

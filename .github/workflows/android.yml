@@ -48,7 +48,7 @@ jobs:
             -PAPP_VERSION_NAME="$APP_VERSION_NAME" \
             -PBG_PRICES_API_BASE_URL="$BG_PRICES_API_BASE_URL"
           mkdir -p artifacts
-          APK_NAME="BG-Prices-${APP_VERSION_NAME}-build${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}.preview.apk"
+          APK_NAME="BG-Prices-${APP_VERSION_NAME}-build${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}-merged.preview.apk"
           cp android/app/build/outputs/apk/debug/app-debug.apk "artifacts/$APK_NAME"
           {
             echo "App: BG Prices Preview"
@@ -63,7 +63,7 @@ jobs:
       - name: Upload immutable preview artifact
         uses: actions/upload-artifact@v5
         with:
-          name: bg-prices-${{ github.run_number }}.preview-attempt-${{ github.run_attempt }}-${{ github.sha }}
+          name: bg-prices-${{ github.run_number }}.merged-preview-attempt-${{ github.run_attempt }}-${{ github.sha }}
           path: artifacts/*
           if-no-files-found: error
           retention-days: 90

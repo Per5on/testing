@@ -40,7 +40,29 @@ jobs:
           done
           grep -q '"status":"UP"' /tmp/bg-prices-health.json
           docker compose exec -T db psql -U bgprices -d bgprices -v ON_ERROR_STOP=1 < backend/src/main/resources/db/demo/sample_offers_bg_2026-11-12.sql
-          curl --fail --silent 'http://localhost:8080/api/v1/prices/catalog?limit=100' | jq -e 'length == 9 and all(.[]; .priceScope == "NATIONAL_ONLINE" and .currency == "EUR" and .verified == true)'
-          curl --fail --silent 'http://localhost:8080/api/v1/catalog' | jq -e '[.categories[].retailers[].code] | sort == ["ardes", "ikea", "praktiker"]'
-          curl --fail --silent 'http://localhost:8080/api/v1/catalog?locality=Veliko%20Tarnovo' | jq -e '.categories | length == 4'
-          curl --fail --silent 'http://localhost:8080/api/v1/localities?query=Ve' | jq -e 'type == "array"'
+          docker compose exec -T db psql -U bgprices -d bgprices -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO store_branches (
+            retailer_code, retailer_name, branch_name, city, settlement, locality_type,
+            municipality, region, postal_code, address, latitude, longitude,
+            source_type, source_url, source_verified_at, active
+          )
+          SELECT v.retailer_code, v.retailer_name, v.branch_name, v.city, v.settlement, 'CITY',
+                 v.city, v.city, '5000', v.address, 43.0757, 25.6172,
+                 'OFFICIAL_WEBSITE', v.source_url, NOW(), TRUE
+          FROM (VALUES
+            ('ardes', 'Ardes', 'Ardes Veliko Tarnovo', 'Veliko Tarnovo', 'Veliko Tarnovo', 'ul. Test 1', 'https://ardes.bg/stores'),
+            ('ikea', 'IKEA', 'IKEA Veliko Tarnovo', 'Veliko Tarnovo', 'Veliko Tarnovo', 'ul. Test 2', 'https://www.ikea.bg/stores'),
+            ('praktiker', 'Praktiker', 'Praktiker Veliko Tarnovo', 'Veliko Tarnovo', 'Veliko Tarnovo', 'ul. Test 3', 'https://praktiker.bg/stores')
+          ) AS v(retailer_code, retailer_name, branch_name, city, settlement, address, source_url)
+          WHERE NOT EXISTS (
+            SELECT 1 FROM store_branches b
+            WHERE b.retailer_code = v.retailer_code AND b.postal_code = '5000' AND b.source_url = v.source_url
+          );
+          SQL
+          curl --fail --silent 'http://localhost:8080/api/v1/prices/catalog?locality=Veliko%20Tarnovo&limit=100' | jq -e 'length == 8 and all(.[]; .priceScope == "NATIONAL_ONLINE" and .currency == "EUR" and .verified == true)'
+          curl --fail --silent 'http://localhost:8080/api/v1/prices/catalog?postalCode=5000&limit=100' | jq -e 'length == 8 and all(.[]; .priceScope == "NATIONAL_ONLINE")'
+          curl --fail --silent 'http://localhost:8080/api/v1/catalog' | jq -e '[.categories[].retailers[]] | length == 0'
+          curl --fail --silent 'http://localhost:8080/api/v1/catalog?locality=Veliko%20Tarnovo' | jq -e '[.categories[].retailers[].code] | sort == ["ardes", "ikea", "praktiker"]'
+          curl --fail --silent 'http://localhost:8080/api/v1/catalog?postalCode=5000' | jq -e '[.categories[].retailers[].code] | sort == ["ardes", "ikea", "praktiker"]'
+          curl --fail --silent 'http://localhost:8080/api/v1/localities?query=Ve' | jq -e 'any(.[]; .name == "Veliko Tarnovo")'
+          curl --fail --silent 'http://localhost:8080/api/v1/localities?query=50&mode=postalCode' | jq -e 'any(.[]; .postalCode == "5000")'
